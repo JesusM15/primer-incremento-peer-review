@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PeerReview — Gestión de Artículos</title>
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/form.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <span class="logo">&#9670; PeerReview</span>
+      <nav class="header-nav">
+        <a href="index.html" class="nav-link active">Artículos</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <section class="form-section">
+      <div class="form-card">
+        <div class="form-card__header">
+          <h1 class="form-title" id="formTitle">Nuevo Artículo</h1>
+          <p class="form-subtitle" id="formSubtitle">Completa los campos para registrar un artículo académico.</p>
+        </div>
+
+        <form id="articleForm" class="article-form" novalidate>
+          <div class="field-group">
+            <label class="field-label" for="articleTitle">
+              Título del artículo <span class="required">*</span>
+            </label>
+            <input
+              type="text"
+              id="articleTitle"
+              name="articleTitle"
+              class="field-input"
+              placeholder="Ej. Impacto del cambio climático en ecosistemas árticos"
+              autocomplete="off"
+              required
+            />
+            <span class="field-error" id="titleError"></span>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">
+              Archivo del artículo <span class="required">*</span>
+            </label>
+            <div class="file-upload-area" id="fileUploadArea">
+              <div class="file-upload-inner">
+                <span class="file-icon">&#128196;</span>
+                <p class="file-hint">PDF o DOCX — máximo 20 MB</p>
+                <p class="file-name" id="fileName">Ningún archivo seleccionado</p>
+              </div>
+              <button type="button" class="btn btn--ghost" id="filePickerBtn">
+                Seleccionar archivo
+              </button>
+              <input
+                type="file"
+                id="fileInput"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                hidden
+              />
+            </div>
+            <span class="field-error" id="fileError"></span>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary" id="submitBtn">
+              <span class="btn-text">Crear artículo</span>
+              <span class="btn-icon">&#10230;</span>
+            </button>
+          </div>
+        </form>
+
+        <div class="toast" id="toast" aria-live="polite"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="pages/article-form.js"></script>
+</body>
+</html>
