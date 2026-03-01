@@ -4,7 +4,7 @@
 Continuación del MVP de la PWA para revisión de pares académicos. Este segundo incremento implementa el tablero de estados de artículos y la capacidad de funcionamiento offline con sincronización bidireccional.
 
 > **Prompt Original:**  
-> Contexto: Estoy construyendo un MVP de una PWA para revisión de pares académicos, este debe cumplir con todas las características, las 3 features iniciales serán las siguientes: Gestión de artículos, Tablero de estados donde se pueda revisar el estado de los artículos, Feedback estructurado, es decir, comentarios dentro de artículos que puedan ser realizados ejemplo en forma: [referencias] las referencias no han sido efectivas.  
+> Contexto: Estoy construyendo un MVP de una PWA para revisión de pares académicos, este debe cumplir con todas las características, las 3 features iniciales serán las siguientes: Gestión de artículos, Tablero de estados donde se pueda revisar el estado de los artículos, Feedback estructurado, es decir, comentarios dentro de artículos que puedan ser realizados ejemplo en  forma: [referencias] las referencias no han sido efectivas.  
 > Tecnologías: HTML, CSS, JavaScript vanilla  
 > Requerimiento específico para este incremento:  
 > Genera un tablero de estados para artículos académicos con lo siguiente:  
