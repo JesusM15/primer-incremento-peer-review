@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PeerReview — Redirección</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #fff;
+      color: #000;
+    }
+    .redirect-message {
+      text-align: center;
+      padding: 2rem;
+      border: 1px solid #000;
+    }
+    .spinner {
+      display: inline-block;
+      margin-right: 0.5rem;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="redirect-message">
+    <span class="spinner">🔄</span>
+    Redirigiendo al tablero...
+  </div>
+  
+  <script>
+    // Redirigir automáticamente al dashboard después de 1 segundo
+    setTimeout(() => {
+      window.location.href = 'dashboard.html';
+    }, 1000);
+  </script>
+</body>
+</html>

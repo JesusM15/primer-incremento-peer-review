@@ -3,16 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1976d2" />
+  <meta name="description" content="Aplicación para gestión y revisión de artículos académicos" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
   <title>PeerReview — Gestión de Artículos</title>
-  <link rel="stylesheet" href="styles/base.css" />
-  <link rel="stylesheet" href="styles/form.css" />
+  <link rel="stylesheet" href="styles/minimal.css" />
 </head>
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <span class="logo">&#9670; PeerReview</span>
+      <span class="logo">PeerReview</span>
       <nav class="header-nav">
-        <a href="index.html" class="nav-link active">Artículos</a>
+        <a href="dashboard.html" class="nav-link">▶ Tablero</a>
+        <a href="index.html" class="nav-link active">+ Artículos</a>
       </nav>
     </div>
   </header>
@@ -79,5 +83,26 @@
   </main>
 
   <script type="module" src="pages/article-form.js"></script>
+
+  <!-- Indicador de estado de conexión -->
+  <script type="module">
+    import { ConnectionStatus } from './components/ConnectionStatus.js';
+    ConnectionStatus.init();
+  </script>
+
+  <!-- Registro de Service Worker para PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('[PWA] Service Worker registrado:', registration.scope);
+          })
+          .catch((error) => {
+            console.log('[PWA] Error registrando Service Worker:', error);
+          });
+      });
+    }
+  </script>
 </body>
 </html>

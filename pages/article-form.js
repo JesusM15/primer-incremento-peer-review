@@ -26,17 +26,28 @@ const headerEl     = document.querySelector('.form-card__header');
 /* ── Estado del módulo ── */
 let editId      = null;  // id si estamos en edición
 let selectedFile = null; // File seleccionado por el usuario
+
+// Detectar si estamos en modo edición
+const currentScript = document.currentScript;
+if (currentScript && currentScript.getAttribute('data-article-id')) {
+  editId = currentScript.getAttribute('data-article-id');
+  console.log('✏️ Modo edición, ID desde data-article-id:', editId);
+} else {
+  // También intentar obtener desde el hash de la URL
+  const hashMatch = window.location.hash.match(/#edit\/(.+)/);
+  if (hashMatch) {
+    editId = hashMatch[1];
+    console.log('✏️ Modo edición, ID desde hash:', editId);
+  }
+}
+
 let existingFile = null; // metadata del archivo ya guardado (modo edición)
 
 /* ── Utilidades ── */
 
 function showToast(message, type = 'success') {
-  toast.textContent = message;
-  toast.className   = `toast show ${type}`;
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => {
-    toast.className = 'toast';
-  }, 3500);
+  // Notificación simple sin SyncUI
+  console.log(`[${type}] ${message}`);
 }
 
 function setFileDisplay(name, hasFile = false) {
@@ -72,9 +83,7 @@ function validate() {
 /* ── Inicialización ── */
 
 async function init() {
-  const params = new URLSearchParams(window.location.search);
-  editId = params.get('id') || null;
-
+  // Usar el ID que pasamos via data-article-id
   if (editId) {
     await loadEditMode(editId);
   } else {
@@ -91,73 +100,159 @@ function setCreateMode() {
 }
 
 async function loadEditMode(id) {
-  const article = await ArticleManager.getById(id);
+  console.log('🔍 Cargando artículo para editar, ID:', id);
+  
+  try {
+    const article = await ArticleManager.getById(id);
+    console.log('📄 Artículo encontrado:', article);
 
-  if (!article) {
-    showToast('Artículo no encontrado. Redirigiendo…', 'error');
-    setTimeout(() => {
-      window.history.replaceState({}, '', window.location.pathname);
-      location.reload();
-    }, 2500);
-    return;
-  }
+    if (!article) {
+      showToast('Artículo no encontrado. Redirigiendo…', 'error');
+      setTimeout(() => {
+        window.Router.navigate('dashboard');
+      }, 2500);
+      return;
+    }
 
-  // Actualizar UI para modo edición
-  formTitleEl.innerHTML = `
-    <span class="edit-badge">&#9998; Modo edición</span><br>
-    Editar artículo
-  `;
-  formSubtitleEl.textContent = `Modifica los campos y guarda los cambios.`;
-  submitBtn.querySelector('.btn-text').textContent = 'Guardar cambios';
+    // Actualizar UI para modo edición
+    formTitleEl.innerHTML = `
+      <span class="edit-badge">&#9998; Modo edición</span><br>
+      Editar artículo
+    `;
+    formSubtitleEl.textContent = `Modifica los campos y guarda los cambios.`;
+    submitBtn.querySelector('.btn-text').textContent = 'Guardar cambios';
 
-  // Prellenar campos
-  titleInput.value = article.title;
+    // Prellenar campos con datos reales
+    titleInput.value = article.title || '';
+    console.log('📝 Título cargado:', article.title);
 
-  if (article.file) {
-    existingFile = article.file;
-    setFileDisplay(`${article.file.name} (guardado)`, true);
-    filePickerBtn.textContent = 'Cambiar archivo';
+    if (article.file) {
+      existingFile = article.file;
+      const fileName = article.file.name || 'archivo.pdf';
+      setFileDisplay(`${fileName} (guardado)`, true);
+      
+      // Buscar el botón de selector de archivo si existe
+      const fileBtn = document.getElementById('filePickerBtn') || 
+                      document.querySelector('[onclick*="fileInput.click()"]');
+      if (fileBtn) {
+        fileBtn.textContent = 'Cambiar archivo';
+      }
+      
+      console.log('📎 Archivo cargado:', fileName);
+    }
+
+    showToast('✅ Artículo cargado para edición', 'success');
+    
+  } catch (error) {
+    console.error('❌ Error cargando artículo:', error);
+    showToast('Error al cargar el artículo', 'error');
   }
 }
 
 /* ── Eventos ── */
 
 function bindEvents() {
+  // Verificar si los elementos existen antes de agregar event listeners
+  if (!form || !titleInput || !submitBtn) {
+    console.warn('⚠️ Algunos elementos del formulario no existen, usando fallback');
+    bindFallbackEvents();
+    return;
+  }
+  
   // Abrir selector de archivos
-  filePickerBtn.addEventListener('click', () => fileInput.click());
+  if (filePickerBtn) {
+    filePickerBtn.addEventListener('click', () => fileInput.click());
+  }
 
   // Archivo seleccionado desde el input
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    handleFileSelected(file);
-  });
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      handleFileSelected(file);
+    });
+  }
 
   // Drag & Drop
-  fileUploadArea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    fileUploadArea.classList.add('drag-over');
-  });
+  if (fileUploadArea) {
+    fileUploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      fileUploadArea.classList.add('drag-over');
+    });
 
-  fileUploadArea.addEventListener('dragleave', () => {
-    fileUploadArea.classList.remove('drag-over');
-  });
+    fileUploadArea.addEventListener('dragleave', () => {
+      fileUploadArea.classList.remove('drag-over');
+    });
 
-  fileUploadArea.addEventListener('drop', (e) => {
-    e.preventDefault();
-    fileUploadArea.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileSelected(file);
-  });
+    fileUploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileUploadArea.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFileSelected(file);
+    });
+  }
 
   // Limpiar error de título al escribir
   titleInput.addEventListener('input', () => {
-    titleError.textContent = '';
-    titleInput.classList.remove('is-invalid');
+    if (titleError) {
+      titleError.textContent = '';
+      titleInput.classList.remove('is-invalid');
+    }
   });
 
   // Submit del formulario
   form.addEventListener('submit', handleSubmit);
+}
+
+function bindFallbackEvents() {
+  // Event listeners simples para el formulario básico
+  const form = document.getElementById('articleForm');
+  const titleInput = document.getElementById('articleTitle');
+  const submitBtn = document.getElementById('submitBtn');
+  
+  if (form && titleInput && submitBtn) {
+    console.log('🔧 Usando event listeners fallback');
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      if (!titleInput.value.trim()) {
+        alert('El título es obligatorio');
+        return;
+      }
+      
+      submitBtn.disabled = true;
+      submitBtn.querySelector('.btn-text').textContent = 'Guardando…';
+      
+      try {
+        if (editId) {
+          await ArticleManager.update(editId, {
+            title: titleInput.value,
+            file: selectedFile
+          });
+          showToast('✓ Artículo actualizado correctamente.', 'success');
+        } else {
+          const article = await ArticleManager.create({
+            title: titleInput.value,
+            file: selectedFile
+          });
+          showToast('✓ Artículo creado correctamente.', 'success');
+        }
+        
+        // Redirigir al dashboard después de guardar
+        setTimeout(() => {
+          window.Router.navigate('dashboard');
+        }, 1500);
+        
+      } catch (error) {
+        console.error('Error guardando artículo:', error);
+        showToast('Error al guardar el artículo', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.querySelector('.btn-text').textContent = editId ? 'Guardar cambios' : 'Crear artículo';
+      }
+    });
+  }
 }
 
 function handleFileSelected(file) {
@@ -233,4 +328,11 @@ async function handleSubmit(e) {
 }
 
 /* ── Arranque ── */
-init();
+
+// Exponer globalmente para inicialización manual
+window.initArticleForm = init;
+
+// Auto-inicializar si no está en modo dashboard
+if (!window.location.pathname.includes('dashboard.html')) {
+  init();
+}

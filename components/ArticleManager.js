@@ -4,13 +4,14 @@
  */
 
 import { ArticleDB } from '../db/ArticleDB.js';
+import { SyncDB } from '../db/SyncDB.js';
+import { Toast } from './Toast.js';
 
 /** Estados válidos del ciclo de revisión */
 export const ArticleStatus = Object.freeze({
   RECEIVED:   'Recibido',
-  IN_REVIEW:  'En revisión',
-  REVIEWED:   'Revisado',
-  ACCEPTED:   'Aceptado',
+  IN_REVIEW:  'En Revisión',
+  APPROVED:   'Aceptado',
   REJECTED:   'Rechazado',
 });
 
@@ -48,7 +49,22 @@ export const ArticleManager = {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    return ArticleDB.save(article);
+    
+    // Guardar localmente
+    const savedArticle = await ArticleDB.save(article);
+    console.log('✅ Artículo guardado localmente:', savedArticle);
+    
+    // Agregar a cola de sincronización
+    try {
+      await SyncDB.addOperation('CREATE', savedArticle);
+      console.log('📤 Artículo agregado a cola de sincronización');
+    } catch (syncError) {
+      console.warn('⚠️ Error al agregar a cola de sincronización:', syncError);
+    }
+    
+    Toast.success('Artículo creado correctamente');
+    
+    return savedArticle;
   },
 
   /**
@@ -58,17 +74,34 @@ export const ArticleManager = {
    * @param {{ title: string, file?: File }} data
    * @returns {Promise<Article>}
    */
-  async update(id, { title, file }) {
+  async update(id, { title, file, status, rejectionReason }) {
     const existing = await ArticleDB.getById(id);
     if (!existing) throw new Error(`Artículo con id "${id}" no encontrado.`);
 
     const updated = {
       ...existing,
-      title:     title.trim(),
-      file:      file ? serializeFile(file) : existing.file,
+      title: title ? title.trim() : existing.title,
+      file: file ? serializeFile(file) : existing.file,
+      status: status || existing.status,
+      rejectionReason: rejectionReason || existing.rejectionReason,
       updatedAt: new Date().toISOString(),
     };
-    return ArticleDB.save(updated);
+    
+    // Actualizar localmente
+    const savedArticle = await ArticleDB.save(updated);
+    console.log('✅ Artículo actualizado localmente:', savedArticle);
+    
+    // Agregar a cola de sincronización
+    try {
+      await SyncDB.addOperation('UPDATE', savedArticle);
+      console.log('📤 Artículo agregado a cola de sincronización');
+    } catch (syncError) {
+      console.warn('⚠️ Error al agregar a cola de sincronización:', syncError);
+    }
+    
+    Toast.success('Artículo actualizado correctamente');
+    
+    return savedArticle;
   },
 
   /**
@@ -94,6 +127,23 @@ export const ArticleManager = {
    * @returns {Promise<boolean>}
    */
   async delete(id) {
-    return ArticleDB.deleteById(id);
+    const existing = await ArticleDB.getById(id);
+    if (!existing) return false;
+    
+    // Eliminar localmente
+    await ArticleDB.deleteById(id);
+    console.log('🗑️ Artículo eliminado localmente:', id);
+    
+    // Agregar a cola de sincronización
+    try {
+      await SyncDB.addOperation('DELETE', { id, deletedAt: new Date().toISOString() });
+      console.log('📤 Eliminación agregada a cola de sincronización');
+    } catch (syncError) {
+      console.warn('⚠️ Error al agregar a cola de sincronización:', syncError);
+    }
+    
+    Toast.success('Artículo eliminado correctamente');
+    
+    return true;
   },
 };
