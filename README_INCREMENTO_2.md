@@ -31,6 +31,35 @@ Continuación del MVP de la PWA para revisión de pares académicos. Este segund
 
 ---
 
+## Prompts Extra y Análisis Crítico
+
+### 1. **Definición de Arquitectura Offline-First**
+> **Prompt:** "Define la arquitectura para una PWA de revisión por pares con un enfoque Offline-First. Utilizaremos Node.js con Express y PostgreSQL para el backend, ya que requiero tecnologías transparentes que pueda controlar totalmente."
+
+**Análisis Crítico:** ❌ **RECHAZADO** - La IA propuso Docker y orquestación compleja. Se eliminó por sobre-ingeniería, manteniendo servidor Express nativo.
+
+### 2. **Migración a Offline-First con Notificaciones**
+> **Prompt:** "Migra el primer incremento (subida y edición de artículos) a la arquitectura Offline-First. Asegúrate de incluir notificaciones de éxito y error."
+
+**Análisis Crítico:** ✅ **ACEPTADO** - Implementación limpia de IndexedDB + Toasts. Integración coherente con backend.
+
+### 3. **Indicador Visual de Conexión**
+> **Prompt:** "Implementa un componente para detectar el estado de la red (Online/Offline) de forma visual en la interfaz."
+
+**Análisis Crítico:** ✅ **ACEPTADO** - Solución minimalista con APIs nativas. Sin sobre-ingeniería, integración natural.
+
+### 4. **Tablero de Estados con Sincronización**
+> **Prompt:** "Desarrolla el segundo incremento: el tablero de estados de artículos. Debe mostrar el flujo de los documentos y permitir la sincronización bidireccional."
+
+**Análisis Crítico:** ✅ **ACEPTADO PARCIALMENTE** - Filtros y contadores conservados (valor agregado). Roles y rutas complejas eliminadas por prematuras.
+
+### 5. **Estrategia de Sincronización LWW**
+> **Prompt:** "Implementa la lógica de sincronización definitiva utilizando una estrategia de 'Last Write Wins' (LWW) basada en timestamps, tal como lo definí en el diseño."
+
+**Análisis Crítico:** ✅ **ACEPTADO** - Implementación precisa de LWW. Sincronización bidireccional estable sin inconsistencias.
+
+---
+
 ## Requerimientos Específicos
 
 ### Tablero de Estados
