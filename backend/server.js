@@ -11,7 +11,10 @@ const app = express();
 const PORT = 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*', // Permitir todos los orígenes temporalmente
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
 
 // Configuración de PostgreSQL - ajusta estos valores según tu instalación
@@ -202,12 +205,13 @@ app.get('/sync', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
   console.log(`📊 Endpoints:`);
   console.log(`   GET    /health     - Health check`);
   console.log(`   GET    /articles   - Listar artículos`);
   console.log(`   POST   /articles   - Crear/actualizar artículo`);
   console.log(`   DELETE /articles/:id - Eliminar artículo`);
-  console.log(`   POST   /sync       - Sincronizar artículos`);
+  console.log(`   POST   /sync       - Sincronización bidireccional`);
+  console.log(`   GET    /ping       - Ping para conexión`);
 });

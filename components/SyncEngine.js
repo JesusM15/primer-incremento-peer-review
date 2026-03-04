@@ -6,7 +6,13 @@
 import { SyncDB } from '../db/SyncDB.js';
 import { ArticleDB } from '../db/ArticleDB.js';
 
-const API_URL = 'http://localhost:3001';
+// API URL dinámica basada en el host actual
+const getApiUrl = () => {
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+  return 'http://10.21.60.67:8000';  // IP fija de tu laptop
+};
 
 export const SyncEngine = {
   _isOnline: navigator.onLine,
@@ -18,14 +24,15 @@ export const SyncEngine = {
    */
   async init() {
     console.log('🔄 SyncEngine inicializado');
-    
+    console.log('📡 API URL:', getApiUrl());
+
     // Escuchar cambios de conectividad
     window.addEventListener('online', () => {
       console.log('🌐 Conexión restaurada');
       this._isOnline = true;
       this.syncPendingChanges();
     });
-    
+
     window.addEventListener('offline', () => {
       console.log('📴 Conexión perdida');
       this._isOnline = false;
@@ -49,7 +56,7 @@ export const SyncEngine = {
    */
   async syncPendingChanges() {
     if (this._isSyncing || !this._isOnline) return;
-    
+
     this._isSyncing = true;
     console.log('📤 Iniciando sincronización...');
 
@@ -59,7 +66,7 @@ export const SyncEngine = {
 
       // 2. Luego, subir operaciones pendientes locales
       const pendingOps = await SyncDB.getPendingOperations();
-      
+
       if (pendingOps.length > 0) {
         console.log(`📦 Enviando ${pendingOps.length} cambios al servidor...`);
 
@@ -68,7 +75,7 @@ export const SyncEngine = {
           _operation: op.operation
         }));
 
-        const response = await fetch(`${API_URL}/sync`, {
+        const response = await fetch(`${getApiUrl()}/sync`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ articles: articlesToSync })
@@ -98,7 +105,7 @@ export const SyncEngine = {
       }
 
     } catch (error) {
-      console.error('❌ Error en sincronización:', error);
+      console.error('❌ Error en sincronización:', error.message);
     } finally {
       this._isSyncing = false;
     }
@@ -110,22 +117,26 @@ export const SyncEngine = {
   async fetchServerChanges() {
     try {
       console.log('📥 Obteniendo cambios del servidor...');
-      
-      const response = await fetch(`${API_URL}/articles`);
-      
+      console.log(`📡 URL: ${getApiUrl()}/articles`);
+
+      const response = await fetch(`${getApiUrl()}/articles`);
+
+      console.log(`📡 Respuesta status: ${response.status}`);
+
       if (!response.ok) {
         throw new Error(`Error del servidor: ${response.status}`);
       }
 
       const serverArticles = await response.json();
-      
-      // Actualizar artículos locales
+      console.log(`📡 Artículos recibidos: ${serverArticles.length}`);
+
       await this.updateLocalArticles(serverArticles);
 
       console.log(`✅ ${serverArticles.length} artículos actualizados del servidor`);
 
     } catch (error) {
-      console.error('❌ Error obteniendo cambios del servidor:', error);
+      console.error('❌ Error obteniendo cambios del servidor:', error.message);
+      throw error;
     }
   },
 
@@ -136,7 +147,6 @@ export const SyncEngine = {
   async updateLocalArticles(serverArticles) {
     for (const serverArticle of serverArticles) {
       try {
-        // Convertir formato de servidor a formato local
         const localArticle = {
           id: serverArticle.id,
           title: serverArticle.title,
@@ -147,24 +157,19 @@ export const SyncEngine = {
           rejectionReason: serverArticle.rejection_reason
         };
 
-        // Obtener artículo local
         const localExisting = await ArticleDB.getById(localArticle.id);
 
         if (!localExisting) {
-          // Artículo nuevo del servidor
           await ArticleDB.save(localArticle);
           console.log(`⬇️ Artículo descargado: ${localArticle.title}`);
         } else {
-          // Comparar timestamps - mantener el más reciente
           const serverTime = new Date(localArticle.updatedAt).getTime();
           const localTime = new Date(localExisting.updatedAt).getTime();
 
           if (serverTime > localTime) {
-            // El servidor tiene versión más reciente
             await ArticleDB.save(localArticle);
             console.log(`🔄 Artículo actualizado del servidor: ${localArticle.title}`);
           }
-          // Si local es más reciente, no hacer nada (se sincronizará al enviar)
         }
 
       } catch (error) {

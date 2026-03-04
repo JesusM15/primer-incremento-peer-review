@@ -27,7 +27,7 @@ const STATIC_ASSETS = [
 // Instalación: cachear recursos estáticos
 self.addEventListener('install', (event) => {
   console.log('[SW] Instalando Service Worker...');
-  
+
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -47,7 +47,7 @@ self.addEventListener('install', (event) => {
 // Activación: limpiar caches antiguas
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activando Service Worker...');
-  
+
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
@@ -67,7 +67,6 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: estrategia Cache First con Network Fallback
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -77,15 +76,31 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Estrategia para recursos estáticos (JS, CSS, HTML)
-  if (request.destination === 'script' || 
-      request.destination === 'style' || 
-      request.destination === 'document') {
-    
+  // ─── HTML: Network First (siempre intenta red, cache como fallback) ───
+  if (request.destination === 'document') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse.ok) {
+            const clonedResponse = networkResponse.clone();
+            caches.open(CACHE_NAME)
+              .then((cache) => cache.put(request, clonedResponse));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          console.warn('[SW] Red no disponible, usando cache para:', request.url);
+          return caches.match(request) || caches.match('/index.html');
+        })
+    );
+    return;
+  }
+
+  // ─── JS y CSS: Cache First con actualización en segundo plano ───
+  if (request.destination === 'script' || request.destination === 'style') {
     event.respondWith(
       caches.match(request)
         .then((cachedResponse) => {
-          // Si está en cache, devolverlo
           if (cachedResponse) {
             // Actualizar cache en segundo plano
             fetch(request)
@@ -95,14 +110,11 @@ self.addEventListener('fetch', (event) => {
                     .then((cache) => cache.put(request, networkResponse));
                 }
               })
-              .catch(() => {
-                // Error de red, ignorar
-              });
-            
+              .catch(() => {});
             return cachedResponse;
           }
 
-          // Si no está en cache, ir a la red
+          // No está en cache, ir a la red
           return fetch(request)
             .then((networkResponse) => {
               if (networkResponse.ok) {
@@ -113,18 +125,15 @@ self.addEventListener('fetch', (event) => {
               return networkResponse;
             })
             .catch((error) => {
-              console.error('[SW] Error de red:', error);
-              // Si es un documento HTML y falla, mostrar página offline
-              if (request.destination === 'document') {
-                return caches.match('/index.html');
-              }
+              console.error('[SW] Error de red para script/style:', error);
               throw error;
             });
         })
     );
+    return;
   }
 
-  // Para imágenes y otros recursos: Network First con Cache Fallback
+  // ─── Imágenes: Network First con Cache Fallback ───
   if (request.destination === 'image') {
     event.respondWith(
       fetch(request)
@@ -148,7 +157,6 @@ self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-articles') {
     console.log('[SW] Sincronizando artículos en segundo plano...');
     event.waitUntil(
-      // Notificar a la aplicación que sincronice
       self.clients.matchAll()
         .then((clients) => {
           clients.forEach((client) => {
@@ -159,7 +167,7 @@ self.addEventListener('sync', (event) => {
   }
 });
 
-// Notificaciones push (opcional, para futuras funcionalidades)
+// Notificaciones push
 self.addEventListener('push', (event) => {
   if (event.data) {
     const data = event.data.json();
@@ -185,7 +193,7 @@ self.addEventListener('push', (event) => {
 // Click en notificación
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  
+
   event.waitUntil(
     self.clients.openWindow(event.notification.data.url)
   );
