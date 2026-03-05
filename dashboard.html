@@ -1,305 +1,254 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#1976d2" />
-    <meta name="description" content="Tablero de control para revisión de artículos académicos" />
-    <link rel="manifest" href="manifest.json" />
-    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
-    <title>PeerReview - Tablero de Control</title>
-    <link rel="stylesheet" href="styles/minimal.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PeerReview - Tablero de Control</title>
+  <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
+  <link rel="stylesheet" href="styles/minimal.css" />
 </head>
 <body>
-    <!-- Header con navegación -->
-    <header class="site-header">
-        <div class="header-inner">
-            <span class="logo">PeerReview</span>
-            <nav class="header-nav">
-                <a href="#dashboard" class="nav-link active">▶ Tablero</a>
-                <a href="#edit" class="nav-link">+ Nuevo Artículo</a>
-            </nav>
-        </div>
-    </header>
 
-    <!-- Vista de Dashboard -->
-    <div id="dashboard-view" data-view="dashboard" style="display: block;">
-        <div class="dashboard-container">
-            <div id="dashboard-content">
-                <!-- Contenido dinámico del dashboard -->
-            </div>
-        </div>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <span class="logo">PeerReview</span>
+      <nav class="header-nav">
+        <a href="#dashboard" class="nav-link active" id="nav-dashboard">▶ Tablero</a>
+        <a href="#edit" class="nav-link" id="nav-edit">+ Nuevo Artículo</a>
+      </nav>
+      <div class="header-user">
+        <span id="user-display" class="user-info"></span>
+        <button class="logout-btn" onclick="logout()">🚪 Cerrar Sesión</button>
+      </div>
     </div>
+  </header>
 
-    <!-- Vista de Formulario -->
-    <div id="form-view" data-view="form" style="display: none;">
-        <!-- El contenido del formulario se cargará aquí -->
+  <!-- Vistas -->
+  <div id="dashboard-view" data-view="dashboard" style="display: block;">
+    <div class="dashboard-container">
+      <div id="dashboard-content"></div>
     </div>
+  </div>
 
-    <!-- Scripts -->
-    <script type="module">
-        import { Router } from './components/Router.js';
-        import { AuthManager } from './components/AuthManager.js';
-        import { SyncEngine } from './components/SyncEngine.js';
-        import { ConnectionStatus } from './components/ConnectionStatus.js';
+  <div id="form-view" data-view="form" style="display: none;"></div>
 
-        // Función para cargar vista de formulario - versión simple
-        async function loadFormView(articleId = null) {
-            console.log('📝 loadFormView llamado con ID:', articleId);
-            const formView = document.getElementById('form-view');
-            
-            if (!formView) {
-                console.error('❌ form-view no encontrado');
-                return;
-            }
-            
-            // HTML del formulario directamente
-            const formHTML = `
-                <main class="main-content">
-                    <section class="form-section">
-                        <div class="form-card">
-                            <div class="form-card__header">
-                                <h1 class="form-title" id="formTitle">${articleId ? 'Editar Artículo' : 'Nuevo Artículo'}</h1>
-                                <p class="form-subtitle" id="formSubtitle">${articleId ? 'Modifica los datos del artículo.' : 'Completa los campos para registrar un artículo académico.'}</p>
-                            </div>
+  <div id="article-view" data-view="article" style="display: none;">
+    <main class="main-content">
+      <div id="article-detail" class="article-detail"></div>
+    </main>
+  </div>
 
-                            <form id="articleForm" class="article-form" novalidate>
-                                <div class="field-group">
-                                    <label class="field-label" for="articleTitle">
-                                        Título del artículo <span class="required">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        id="articleTitle"
-                                        name="articleTitle"
-                                        class="field-input"
-                                        placeholder="Ej. Impacto del cambio climático en ecosistemas árticos"
-                                        autocomplete="off"
-                                        required
-                                    />
-                                    <span class="field-error" id="titleError"></span>
-                                </div>
-
-                                <div class="field-group">
-                                    <label class="field-label">
-                                        Archivo del artículo <span class="required">*</span>
-                                    </label>
-                                    <div class="file-upload-area" id="fileUploadArea">
-                                        <div class="file-upload-inner">
-                                            <div class="file-upload-icon">📄</div>
-                                            <div class="file-upload-text">
-                                                <p id="fileName">Ningún archivo seleccionado</p>
-                                                <p class="file-upload-hint">Haz clic para seleccionar o arrastra un archivo aquí</p>
-                                            </div>
-                                        </div>
-                                        <input type="file" id="fileInput" accept=".pdf,.doc,.docx" style="display: none;" />
-                                        <button type="button" id="filePickerBtn" class="file-picker-btn">
-                                            Seleccionar archivo
-                                        </button>
-                                    </div>
-                                    <span class="field-error" id="fileError"></span>
-                                </div>
-
-                                <div class="form-actions">
-                                    <button type="submit" id="submitBtn" class="btn btn--primary">
-                                        <span class="btn-text">${articleId ? 'Guardar cambios' : 'Crear artículo'}</span>
-                                    </button>
-                                    <button type="button" class="btn btn--secondary" onclick="window.Router.navigate('dashboard')">
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </section>
-                </main>
-            `;
-            
-            // Agregar el HTML
-            formView.innerHTML = formHTML;
-            console.log('✅ Formulario HTML agregado');
-            
-            // Cargar el script del formulario
-            const script = document.createElement('script');
-            script.type = 'module';
-            script.src = './pages/article-form.js';
-            
-            // Pasar el ID del artículo si estamos editando
-            if (articleId) {
-                script.setAttribute('data-article-id', articleId);
-                console.log('🏷️ ID de artículo agregado:', articleId);
-            }
-            
-            formView.appendChild(script);
-            console.log('📜 Script del formulario agregado');
-            
-            // Forzar inicialización después de un breve delay
-            setTimeout(() => {
-                console.log('🔄 Verificando inicialización...');
-                if (window.initArticleForm) {
-                    window.initArticleForm();
-                } else {
-                    console.log('⚠️ initArticleForm no disponible, intentando inicialización manual');
-                    // Inicialización manual básica
-                    const form = document.getElementById('articleForm');
-                    const titleInput = document.getElementById('articleTitle');
-                    const submitBtn = document.getElementById('submitBtn');
-                    const fileInput = document.getElementById('fileInput');
-                    const filePickerBtn = document.getElementById('filePickerBtn');
-                    const fileUploadArea = document.getElementById('fileUploadArea');
-                    const fileName = document.getElementById('fileName');
-                    
-                    if (form && titleInput && submitBtn) {
-                        console.log('✅ Elementos del formulario encontrados');
-                        
-                        // Cargar datos si estamos editando
-                        if (articleId) {
-                            // Simular carga de datos (debería venir de IndexedDB)
-                            titleInput.value = 'Artículo de ejemplo - ' + articleId;
-                            fileName.textContent = 'archivo.pdf';
-                        }
-                        
-                        // Event listeners para archivos
-                        if (filePickerBtn && fileInput) {
-                            filePickerBtn.addEventListener('click', () => fileInput.click());
-                            
-                            fileInput.addEventListener('change', (e) => {
-                                const file = e.target.files[0];
-                                if (file) {
-                                    fileName.textContent = file.name;
-                                    fileName.className = 'file-name has-file';
-                                    fileUploadArea.classList.add('has-file');
-                                    console.log('📎 Archivo seleccionado:', file.name);
-                                }
-                            });
-                        }
-                        
-                        // Drag & Drop
-                        if (fileUploadArea) {
-                            fileUploadArea.addEventListener('dragover', (e) => {
-                                e.preventDefault();
-                                fileUploadArea.classList.add('drag-over');
-                            });
-                            
-                            fileUploadArea.addEventListener('dragleave', () => {
-                                fileUploadArea.classList.remove('drag-over');
-                            });
-                            
-                            fileUploadArea.addEventListener('drop', (e) => {
-                                e.preventDefault();
-                                fileUploadArea.classList.remove('drag-over');
-                                const file = e.dataTransfer.files[0];
-                                if (file) {
-                                    fileName.textContent = file.name;
-                                    fileName.className = 'file-name has-file';
-                                    fileUploadArea.classList.add('has-file');
-                                    console.log('📎 Archivo arrastrado:', file.name);
-                                }
-                            });
-                        }
-                        
-                        // Event listener simple
-                        form.addEventListener('submit', (e) => {
-                            e.preventDefault();
-                            alert('Formulario enviado - ID: ' + (articleId || 'nuevo'));
-                        });
-                    }
-                }
-            }, 200);
-        }
-
-        // Botón de prueba para depuración
-        window.testEdit = (articleId) => {
-            console.log('🧪 Test edit con ID:', articleId);
-            Router.navigate(`edit/${articleId}`);
-        };
-        
-        // Botón de prueba para formulario
-        window.testForm = () => {
-            console.log('🧪 Test formulario');
-            loadFormView('test-123');
-            Router.showView('form');
-        };
-        async function initApp() {
-            console.log('🚀 Inicializando aplicación...');
-            
-            // Inicializar sistemas base
-            await AuthManager.init();
-            await SyncEngine.init();
-            ConnectionStatus.init();
-            
-            // Configurar rutas
-            Router.register('#dashboard', () => {
-                console.log('📊 Navegando a dashboard');
-                Router.showView('dashboard');
-                
-                // Actualizar navegación activa
-                document.querySelectorAll('.nav-link').forEach(link => {
-                    link.classList.remove('active');
-                });
-                document.querySelector('a[href="#dashboard"]').classList.add('active');
-                
-                // Cargar dashboard si no está cargado
-                if (!document.getElementById('dashboard-content').children.length) {
-                    import('./pages/dashboard.js').then(module => {
-                        module.initDashboard();
-                    });
-                }
-            });
-            
-            Router.register('#edit', () => {
-                console.log('✏️ Navegando a edición');
-                loadFormView();
-                Router.showView('form');
-                
-                // Actualizar navegación activa
-                document.querySelectorAll('.nav-link').forEach(link => {
-                    link.classList.remove('active');
-                });
-                document.querySelector('a[href="#edit"]').classList.add('active');
-            });
-            
-            Router.register('#edit/:id', (route) => {
-                console.log('✏️ Editando artículo');
-                const params = Router.getParams('#edit/:id');
-                if (params && params.id) {
-                    loadFormView(params.id);
-                    Router.showView('form');
-                    
-                    // Actualizar navegación activa
-                    document.querySelectorAll('.nav-link').forEach(link => {
-                        link.classList.remove('active');
-                    });
-                    document.querySelector('a[href="#edit"]').classList.add('active');
-                }
-            });
-            
-            // Inicializar router
-            Router.init();
-            
-            console.log('✅ Aplicación inicializada');
-        }
-
-        // Iniciar cuando el DOM esté listo
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initApp);
+  <!-- Autenticación -->
+  <script type="module">
+    const savedUser = localStorage.getItem('peerreview_user');
+    if (!savedUser) {
+      window.location.replace('./login.html');
+    } else {
+      try {
+        const user = JSON.parse(savedUser);
+        if (!user.sessionActive || !user.role) {
+          window.location.replace('./login.html');
         } else {
-            initApp();
+          const icons = { 'Autor': '✍️', 'Revisor': '👁️', 'Editor': '📝' };
+          const el = document.getElementById('user-display');
+          if (el) el.textContent = `${icons[user.role] || '👤'} ${user.name}`;
         }
-    </script>
+      } catch {
+        window.location.replace('./login.html');
+      }
+    }
 
-    <!-- Registro de Service Worker para PWA -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((registration) => {
-                        console.log('[PWA] Service Worker registrado:', registration.scope);
-                    })
-                    .catch((error) => {
-                        console.log('[PWA] Error registrando Service Worker:', error);
-                    });
-            });
+    window.logout = function () {
+      try {
+        const u = JSON.parse(localStorage.getItem('peerreview_user') || '{}');
+        u.sessionActive = false;
+        localStorage.setItem('peerreview_user', JSON.stringify(u));
+      } catch {}
+      sessionStorage.clear();
+      window.location.href = './login.html';
+    };
+  </script>
+
+  <!-- App -->
+  <script type="module">
+    import { Router }           from './components/Router.js';
+    import { SyncEngine }       from './components/SyncEngine.js';
+    import { SyncButton }       from './components/SyncButton.js';
+    import { ConnectionStatus } from './components/ConnectionStatus.js';
+    import { ArticleDetail }    from './components/ArticleDetail.js';
+    import { AuthManager }      from './components/AuthManager.js';
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    function setActiveNav(id) {
+      document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+      const el = document.getElementById(id);
+      if (el) el.classList.add('active');
+    }
+
+    async function loadFormView(editId = null) {
+      const container = document.getElementById('form-view');
+      if (!container) return;
+
+      container.innerHTML = `
+        <div class="form-container">
+          <div class="form-card">
+            <div class="form-card__header">
+              <h1 id="formTitle">${editId ? 'Editar artículo' : 'Nuevo artículo'}</h1>
+              <p class="form-subtitle" id="formSubtitle">
+                ${editId
+                  ? 'Actualiza título y/o archivo del artículo.'
+                  : 'Completa los campos para registrar un artículo académico.'}
+              </p>
+            </div>
+            <form id="articleForm" class="article-form" novalidate>
+              <div class="field-group">
+                <label class="field-label" for="articleTitle">
+                  Título del artículo <span class="required">*</span>
+                </label>
+                <input
+                  type="text" id="articleTitle" name="articleTitle"
+                  class="field-input"
+                  placeholder="Ej. Impacto del cambio climático en ecosistemas árticos"
+                  autocomplete="off" required
+                />
+                <span class="field-error" id="titleError"></span>
+              </div>
+
+              <div class="field-group">
+                <label class="field-label">
+                  Archivo del artículo ${editId ? '' : '<span class="required">*</span>'}
+                </label>
+                <div class="file-upload-area" id="fileUploadArea">
+                  <div class="file-upload-inner">
+                    <span class="file-icon">&#128196;</span>
+                    <p class="file-hint">PDF o DOCX — máximo 20 MB</p>
+                    <p class="file-name" id="fileName">Ningún archivo seleccionado</p>
+                  </div>
+                  <button type="button" class="btn btn--ghost" id="filePickerBtn">
+                    Seleccionar archivo
+                  </button>
+                  <input type="file" id="fileInput"
+                    accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    hidden />
+                </div>
+                <span class="field-error" id="fileError"></span>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="btn btn--primary" id="submitBtn">
+                  <span class="btn-text">${editId ? 'Guardar cambios' : 'Crear artículo'}</span>
+                  <span class="btn-icon">&#10230;</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+
+      // Cargar script del formulario una sola vez
+      await new Promise((resolve, reject) => {
+        if (window.__articleFormScriptLoaded) return resolve();
+        const existing = document.querySelector('script[data-peerreview="article-form"]');
+        if (existing) { window.__articleFormScriptLoaded = true; return resolve(); }
+        const s = document.createElement('script');
+        s.type = 'module';
+        s.src = './pages/article-form.js';
+        s.dataset.peerreview = 'article-form';
+        s.onload = () => { window.__articleFormScriptLoaded = true; resolve(); };
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+
+      // Actualizar querystring para que article-form.js detecte edición
+      const url = new URL(window.location.href);
+      editId ? url.searchParams.set('id', editId) : url.searchParams.delete('id');
+      window.history.replaceState({}, '', url.toString());
+
+      setTimeout(() => window.__initArticleForm?.(), 0);
+    }
+
+    // ── Inicialización ────────────────────────────────────────────────────────
+
+    async function initApp() {
+      AuthManager.init();
+      await SyncEngine.init();
+      SyncButton.init();
+      ConnectionStatus.init();
+
+      // ── Rutas ───────────────────────────────────────────────────────────────
+
+      Router.register('#dashboard', () => {
+        Router.showView('dashboard');
+        setActiveNav('nav-dashboard');
+        import('./pages/dashboard.js').then(m => m.initDashboard());
+      });
+
+      Router.register('#edit', () => {
+        Router.showView('form');
+        setActiveNav('nav-edit');
+        loadFormView(null);
+      });
+
+      Router.register('#edit/:id', () => {
+        Router.showView('form');
+        setActiveNav('nav-edit');
+        const params = Router.getParams('#edit/:id');
+        loadFormView(params?.id || null);
+      });
+
+      Router.register('#article/:id', async () => {
+        Router.showView('article');
+        setActiveNav('nav-dashboard'); // el detail sigue siendo parte del tablero
+
+        const params = Router.getParams('#article/:id');
+        const articleId = params?.id;
+
+        if (!articleId) {
+          Router.navigate('dashboard');
+          return;
         }
-    </script>
+
+        // Limpiar contenido previo
+        const container = document.getElementById('article-detail');
+        if (container) container.innerHTML = '';
+
+        try {
+          await ArticleDetail.init('article-detail', articleId);
+        } catch (err) {
+          console.error('❌ Error cargando artículo:', err);
+          if (container) {
+            container.innerHTML = `
+              <div class="error-message">
+                <h2>❌ Error cargando artículo</h2>
+                <p>${err.message}</p>
+                <a href="#dashboard" class="btn btn--primary">Volver al Tablero</a>
+              </div>
+            `;
+          }
+        }
+      });
+
+      Router.init();
+      setTimeout(() => Router.handleRoute(), 0);
+    }
+
+    document.readyState === 'loading'
+      ? document.addEventListener('DOMContentLoaded', initApp)
+      : initApp();
+  </script>
+
+  <!-- Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(r => console.log('[PWA] SW registrado:', r.scope))
+          .catch(e => console.log('[PWA] Error SW:', e));
+      });
+    }
+  </script>
+
 </body>
 </html>

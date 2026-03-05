@@ -18,6 +18,12 @@
         <a href="dashboard.html" class="nav-link">▶ Tablero</a>
         <a href="index.html" class="nav-link active">+ Artículos</a>
       </nav>
+      <div class="header-user">
+        <span id="user-display" class="user-info"></span>
+        <button id="logout-btn" class="logout-btn" onclick="logout()">
+          🚪 Cerrar Sesión
+        </button>
+      </div>
     </div>
   </header>
 
@@ -81,6 +87,62 @@
       </div>
     </section>
   </main>
+
+  <!-- Verificación de autenticación -->
+  <script type="module">
+    // Verificación simple de sesión activa
+    const savedUser = localStorage.getItem('peerreview_user');
+    
+    if (!savedUser) {
+      console.log('🔍 No hay sesión, redirigiendo a login...');
+      window.location.replace('./login.html');
+    } else {
+      try {
+        const user = JSON.parse(savedUser);
+        if (!user.sessionActive || !user.role) {
+          console.log('🔍 Sesión inactiva, redirigiendo a login...');
+          window.location.replace('./login.html');
+        } else {
+          // Mostrar información del usuario en el header
+          const userDisplay = document.getElementById('user-display');
+          if (userDisplay) {
+            const icons = {
+              'Autor': '✍️',
+              'Revisor': '👁️', 
+              'Editor': '📝'
+            };
+            userDisplay.textContent = `${icons[user.role] || '👤'} ${user.name}`;
+          }
+        }
+      } catch (error) {
+        console.log('🔍 Error en sesión, redirigiendo a login...');
+        window.location.replace('./login.html');
+      }
+    }
+
+    // Función de logout global
+    window.logout = function() {
+      console.log('🚪 Cerrando sesión...');
+      
+      // Marcar sesión como inactiva
+      const savedUser = localStorage.getItem('peerreview_user');
+      if (savedUser) {
+        try {
+          const user = JSON.parse(savedUser);
+          user.sessionActive = false;
+          localStorage.setItem('peerreview_user', JSON.stringify(user));
+        } catch (error) {
+          console.error('Error actualizando sesión:', error);
+        }
+      }
+      
+      // Limpiar sessionStorage
+      sessionStorage.clear();
+      
+      // Redirigir a login
+      window.location.href = './login.html';
+    };
+  </script>
 
   <script type="module" src="pages/article-form.js"></script>
 

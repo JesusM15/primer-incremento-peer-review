@@ -21,10 +21,46 @@ async function initDashboard() {
   // Mostrar vista de dashboard
   Router.showView('dashboard');
 
-  // Agregar container para ArticleList
-  const dashboardContent = document.getElementById('dashboard-content');
-  if (!document.getElementById('article-list')) {
-    dashboardContent.innerHTML = '<div id="article-list"></div>';
+  // Esperar a que el DOM esté completamente listo
+  await new Promise(resolve => {
+    if (document.readyState === 'complete') {
+      resolve();
+    } else {
+      window.addEventListener('load', resolve, { once: true });
+    }
+  });
+
+  // Esperar adicional y reintentar si los elementos no existen
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  while (attempts < maxAttempts) {
+    const articleList = document.getElementById('article-list');
+    const dashboardContent = document.getElementById('dashboard-content');
+    
+    console.log(`🔍 Intento ${attempts + 1}/${maxAttempts}`);
+    console.log('🔍 article-list existe:', articleList);
+    console.log('🔍 dashboardContent encontrado:', dashboardContent);
+    
+    if (!articleList && dashboardContent) {
+      console.log('🔧 Creando article-list container...');
+      dashboardContent.innerHTML = '<div id="article-list"></div>';
+      break;
+    } else if (articleList) {
+      console.log('🔧 article-list ya existe, no se crea');
+      break;
+    }
+    
+    attempts++;
+    if (attempts < maxAttempts) {
+      console.log('⏳ Esperando 100ms antes de reintentar...');
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  
+  if (attempts >= maxAttempts) {
+    console.error('❌ No se pudo encontrar dashboard-content después de varios intentos');
+    return;
   }
 
   // Inicializar lista de artículos

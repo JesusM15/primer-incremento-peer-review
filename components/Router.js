@@ -91,19 +91,23 @@ export const Router = {
               return;
             } catch (error) {
               console.error(`❌ Error en ruta ${pattern}:`, error);
+              this._showError('Error al cargar la página');
+              return;
             }
           }
         }
       }
       
-      // Ruta por defecto
-      const defaultHandler = this._routes.get('#dashboard');
-      if (defaultHandler) {
-        console.log('🏠 Usando ruta por defecto: #dashboard');
-        defaultHandler('#dashboard');
-        this._currentRoute = '#dashboard';
-      }
+      console.warn(`⚠️ Ruta no encontrada: ${route}`);
+      this._showError('Página no encontrada');
     }
+  },
+
+  /**
+   * Método público para manejar rutas
+   */
+  handleRoute() {
+    this._handleRoute();
   },
 
   /**

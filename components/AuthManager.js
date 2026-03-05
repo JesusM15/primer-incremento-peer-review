@@ -5,7 +5,7 @@
 
 export const AuthManager = {
   _currentUser: null,
-  _roles: ['Editor', 'Revisor'],
+  _roles: ['Autor', 'Revisor', 'Editor'],
 
   /**
    * Inicializa el sistema de autenticación
@@ -16,18 +16,56 @@ export const AuthManager = {
     if (savedUser) {
       try {
         this._currentUser = JSON.parse(savedUser);
+        
+        // Validar que la sesión esté activa y tenga datos válidos
+        if (!this._currentUser.sessionActive || !this._currentUser.id || !this._currentUser.role) {
+          console.warn('⚠️ Sesión inválida o inactiva, limpiando');
+          this._clearInvalidSession();
+          return;
+        }
+        
+        console.log('👤 Sesión activa encontrada:', this._currentUser.role);
+        return;
       } catch (error) {
         console.warn('Error cargando usuario:', error);
-        this._currentUser = null;
+        this._clearInvalidSession();
       }
     }
 
-    // Si no hay usuario, mostrar selector de rol
-    if (!this._currentUser) {
-      this._showRoleSelector();
-    }
+    // Si no hay sesión activa, redirigir a login
+    console.log('🔍 No hay sesión activa, redirigiendo a login...');
+    this._redirectToLogin();
+  },
 
-    console.log('👤 AuthManager inicializado:', this._currentUser);
+  /**
+   * Limpia sesión inválida
+   */
+  _clearInvalidSession() {
+    localStorage.removeItem('peerreview_user');
+    sessionStorage.clear();
+    this._currentUser = null;
+  },
+
+  /**
+   * Redirige a página de login
+   */
+  _redirectToLogin() {
+    // Evitar redirección infinita si ya estamos en login
+    if (window.location.pathname.includes('login.html')) {
+      return;
+    }
+    
+    // Forzar recarga completa para limpiar estado
+    window.location.replace('./login.html');
+  },
+
+  /**
+   * Verifica si el usuario está autenticado
+   */
+  isAuthenticated() {
+    const result = this._currentUser !== null && this._currentUser.sessionActive === true;
+    console.log('🔧 isAuthenticated() llamado, resultado:', result, 'usuario:', this._currentUser);
+    return result;
   },
 
   /**
@@ -59,102 +97,43 @@ export const AuthManager = {
     
     switch (action) {
       case 'create_article':
-        return role === 'Editor';
-      
+        return role === 'Autor';
+        
       case 'edit_article':
-        return role === 'Editor';
-      
+        return role === 'Autor';
+        
       case 'start_review':
-        return role === 'Editor' && articleStatus === 'Recibido';
-      
-      case 'assign_reviewer':
-        return role === 'Editor' && articleStatus === 'En Revisión';
-      
+        return (role === 'Editor' || role === 'Revisor') && articleStatus === 'Recibido';
+        
+      case 'add_comment':
+        return role === 'Editor' || role === 'Revisor';
+        
       case 'approve_reject':
-        return role === 'Revisor' && articleStatus === 'En Revisión';
-      
+        return (role === 'Editor' || role === 'Revisor') && articleStatus === 'En Revisión';
+        
       case 'delete_article':
-        return role === 'Editor';
-      
+        return role === 'Autor' || role === 'Editor';
+        
       default:
         return false;
     }
   },
 
   /**
-   * Muestra selector de rol
+   * Muestra selector de rol solo si no está autenticado
+   * NOTA: Esta función ya no se usa, ahora usamos login.html
    */
   _showRoleSelector() {
-    // Crear modal de selección de rol
-    const modal = document.createElement('div');
-    modal.id = 'role-selector';
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10000;
-    `;
-
-    const content = document.createElement('div');
-    content.style.cssText = `
-      background: white;
-      border: 1px solid #000;
-      padding: 2rem;
-      max-width: 400px;
-      width: 90%;
-    `;
-
-    content.innerHTML = `
-      <h2 style="margin-bottom: 1rem; font-size: 1.2rem;">Selecciona tu rol</h2>
-      <p style="margin-bottom: 1.5rem; color: #666; font-size: 0.9rem;">
-        Elige tu rol para usar el sistema de revisión por pares:
-      </p>
-      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-        <button class="role-btn" data-role="Editor" style="padding: 0.75rem; border: 1px solid #000; background: white; cursor: pointer;">
-          📝 Editor - Puede crear y asignar artículos para revisión
-        </button>
-        <button class="role-btn" data-role="Revisor" style="padding: 0.75rem; border: 1px solid #000; background: white; cursor: pointer;">
-          👁️ Revisor - Puede aprobar o rechazar artículos
-        </button>
-      </div>
-    `;
-
-    modal.appendChild(content);
-    document.body.appendChild(modal);
-
-    // Event listeners
-    const buttons = modal.querySelectorAll('.role-btn');
-    buttons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const role = btn.dataset.role;
-        this._setUserRole(role);
-        document.body.removeChild(modal);
-      });
-    });
-
-    // Hover effects
-    buttons.forEach(btn => {
-      btn.addEventListener('mouseenter', () => {
-        btn.style.background = '#000';
-        btn.style.color = '#fff';
-      });
-      btn.addEventListener('mouseleave', () => {
-        btn.style.background = '#fff';
-        btn.style.color = '#000';
-      });
-    });
+    // Redirigir a página de login en lugar de mostrar modal
+    this._redirectToLogin();
   },
 
   /**
    * Establece el rol del usuario
    */
   _setUserRole(role) {
+    console.log('🔧 _setUserRole llamado con:', role);
+    
     this._currentUser = {
       id: `user_${Date.now()}`,
       name: `Usuario ${role}`,
@@ -162,8 +141,15 @@ export const AuthManager = {
       createdAt: new Date().toISOString()
     };
 
+    console.log('🔧 Usuario creado:', this._currentUser);
+
     // Guardar en localStorage
     localStorage.setItem('peerreview_user', JSON.stringify(this._currentUser));
+    console.log('🔧 Usuario guardado en localStorage');
+
+    // Verificar que se guardó
+    const saved = localStorage.getItem('peerreview_user');
+    console.log('🔧 Verificación - Usuario en localStorage:', saved);
 
     // Disparar evento de cambio de usuario
     window.dispatchEvent(new CustomEvent('userChanged', {
@@ -171,29 +157,56 @@ export const AuthManager = {
     }));
 
     console.log(`👤 Rol establecido: ${role}`);
+    
+    // Pequeña pausa antes de redirigir para asegurar que se guarde
+    setTimeout(() => {
+      console.log('🔧 Ejecutando redirección a dashboard...');
+      window.location.replace('./dashboard.html');
+    }, 100);
   },
 
   /**
-   * Cambia de rol
+   * Cambia de rol (cierra sesión y redirige a login)
    */
   switchRole() {
+    console.log('🔄 Cambiando rol...');
+    
+    // Limpiar localStorage
     localStorage.removeItem('peerreview_user');
+    
+    // Limpiar estado actual
     this._currentUser = null;
-    this._showRoleSelector();
+    
+    // Limpiar cualquier estado de sesión adicional
+    sessionStorage.clear();
+    
+    // Forzar recarga para limpiar estado
+    window.location.href = './login.html';
   },
 
   /**
-   * Cierra sesión
+   * Cierra sesión completamente
    */
   logout() {
-    localStorage.removeItem('peerreview_user');
+    console.log('🚪 Cerrando sesión...');
+    
+    // Marcar sesión como inactiva
+    if (this._currentUser) {
+      this._currentUser.sessionActive = false;
+      localStorage.setItem('peerreview_user', JSON.stringify(this._currentUser));
+    }
+    
+    // Limpiar estado actual
     this._currentUser = null;
+    
+    // Limpiar cualquier estado de sesión adicional
+    sessionStorage.clear();
     
     // Disparar evento de logout
     window.dispatchEvent(new CustomEvent('userLoggedOut'));
     
-    // Recargar página
-    window.location.reload();
+    // Forzar recarga para limpiar estado de la aplicación
+    window.location.href = './login.html';
   },
 
   /**
@@ -203,11 +216,17 @@ export const AuthManager = {
     const user = this.getCurrentUser();
     if (!user) return null;
 
+    const icons = {
+      'Autor': '✍️',
+      'Revisor': '👁️', 
+      'Editor': '📝'
+    };
+
     return {
       name: user.name,
       role: user.role,
-      roleIcon: user.role === 'Editor' ? '📝' : '👁️',
-      roleColor: user.role === 'Editor' ? '#000' : '#666'
+      roleIcon: icons[user.role] || '�',
+      roleColor: user.role === 'Autor' ? '#2563eb' : user.role === 'Editor' ? '#000' : '#666'
     };
   }
 };

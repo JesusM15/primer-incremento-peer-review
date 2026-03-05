@@ -1,180 +1,200 @@
 /**
  * pages/article-form.js
- * Controlador de la página de creación / edición de artículos.
- *
- * Modo edición: ?id=<articleId>  en la URL
- * Modo creación: sin parámetros
+ * Manejo robusto del formulario de creación/edición de artículos
+ * - Idempotente (no duplica listeners)
+ * - Feedback visual verde/rojo para archivo
+ * - Valida por extensión + accept (no solo file.type)
  */
 
 import { ArticleManager } from '../components/ArticleManager.js';
+import { Router } from '../components/Router.js';
 
-/* ── Elementos del DOM ── */
-const form         = document.getElementById('articleForm');
-const titleInput   = document.getElementById('articleTitle');
-const fileInput    = document.getElementById('fileInput');
-const filePickerBtn = document.getElementById('filePickerBtn');
-const fileUploadArea = document.getElementById('fileUploadArea');
-const fileNameEl   = document.getElementById('fileName');
-const submitBtn    = document.getElementById('submitBtn');
-const formTitleEl  = document.getElementById('formTitle');
-const formSubtitleEl = document.getElementById('formSubtitle');
-const titleError   = document.getElementById('titleError');
-const fileError    = document.getElementById('fileError');
-const toast        = document.getElementById('toast');
-const headerEl     = document.querySelector('.form-card__header');
+const MAX_MB = 20;
+const MAX_BYTES = MAX_MB * 1024 * 1024;
+const ALLOWED_EXT = ['pdf', 'doc', 'docx'];
 
-/* ── Estado del módulo ── */
-let editId      = null;  // id si estamos en edición
-let selectedFile = null; // File seleccionado por el usuario
+function ensureFormStyles() {
+  if (document.getElementById('peerreview-form-styles')) return;
 
-// Detectar si estamos en modo edición
-const currentScript = document.currentScript;
-if (currentScript && currentScript.getAttribute('data-article-id')) {
-  editId = currentScript.getAttribute('data-article-id');
-  console.log('✏️ Modo edición, ID desde data-article-id:', editId);
-} else {
-  // También intentar obtener desde el hash de la URL
-  const hashMatch = window.location.hash.match(/#edit\/(.+)/);
-  if (hashMatch) {
-    editId = hashMatch[1];
-    console.log('✏️ Modo edición, ID desde hash:', editId);
+  const style = document.createElement('style');
+  style.id = 'peerreview-form-styles';
+  style.textContent = `
+    .file-upload-area.is-valid {
+      border-color: #16a34a !important;
+      box-shadow: 0 0 0 2px rgba(22,163,74,0.15) !important;
+    }
+    .file-upload-area.is-invalid {
+      border-color: #dc2626 !important;
+      box-shadow: 0 0 0 2px rgba(220,38,38,0.15) !important;
+    }
+    .field-error.show {
+      display: block !important;
+      color: #dc2626 !important;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .file-name.is-valid {
+      color: #16a34a !important;
+      font-weight: 600;
+    }
+    .file-name.is-invalid {
+      color: #dc2626 !important;
+      font-weight: 600;
+    }
+    .file-upload-area.is-loading {
+      border-color: #f59e0b !important;
+      box-shadow: 0 0 0 2px rgba(245,158,11,0.15) !important;
+    }
+    .file-name.is-loading {
+      color: #f59e0b !important;
+      font-weight: 600;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function getEl(id) {
+  return document.getElementById(id);
+}
+
+function getFileExtension(filename = '') {
+  const parts = filename.toLowerCase().split('.');
+  return parts.length > 1 ? parts.pop() : '';
+}
+
+function setError(el, message) {
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.toggle('show', Boolean(message));
+}
+
+function setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state, message }) {
+  // state: 'valid' | 'invalid' | 'loading' | 'idle'
+  const states = ['is-valid', 'is-invalid', 'is-loading'];
+
+  if (fileUploadArea) {
+    states.forEach(s => fileUploadArea.classList.remove(s));
+    if (state !== 'idle') fileUploadArea.classList.add(`is-${state}`);
   }
+  if (fileNameEl) {
+    states.forEach(s => fileNameEl.classList.remove(s));
+    if (state !== 'idle') fileNameEl.classList.add(`is-${state}`);
+  }
+  setError(fileErrorEl, message || '');
 }
 
-let existingFile = null; // metadata del archivo ya guardado (modo edición)
-
-/* ── Utilidades ── */
-
-function showToast(message, type = 'success') {
-  // Notificación simple sin SyncUI
-  console.log(`[${type}] ${message}`);
-}
-
-function setFileDisplay(name, hasFile = false) {
-  fileNameEl.textContent = name;
-  fileNameEl.className   = hasFile ? 'file-name has-file' : 'file-name';
-  fileUploadArea.classList.toggle('has-file', hasFile);
-}
-
-function clearErrors() {
-  titleError.textContent = '';
-  fileError.textContent  = '';
-  titleInput.classList.remove('is-invalid');
-}
-
-function validate() {
-  let valid = true;
-
-  if (!titleInput.value.trim()) {
-    titleError.textContent = 'El título es obligatorio.';
-    titleInput.classList.add('is-invalid');
-    valid = false;
+function validateFile(file, fileInput) {
+  if (!file) {
+    return { ok: false, message: 'Debes seleccionar un archivo.' };
   }
 
-  // En creación siempre requerimos archivo; en edición sólo si no hay uno guardado
-  if (!selectedFile && !existingFile) {
-    fileError.textContent = 'Debes seleccionar un archivo (PDF o DOCX).';
-    valid = false;
+  if (file.size > MAX_BYTES) {
+    return { ok: false, message: `El archivo excede ${MAX_MB} MB.` };
   }
 
-  return valid;
+  const ext = getFileExtension(file.name);
+  if (!ALLOWED_EXT.includes(ext)) {
+    return { ok: false, message: 'Formato inválido. Solo PDF, DOC o DOCX.' };
+  }
+
+  return { ok: true, message: '' };
 }
 
-/* ── Inicialización ── */
+function initArticleForm() {
+  ensureFormStyles();
 
-async function init() {
-  // Usar el ID que pasamos via data-article-id
-  if (editId) {
-    await loadEditMode(editId);
+  const form = getEl('articleForm');
+  if (!form) return;
+
+  const titleInput     = getEl('articleTitle');
+  const titleError     = getEl('titleError');
+  const fileUploadArea = getEl('fileUploadArea');
+  const filePickerBtn  = getEl('filePickerBtn');
+  const fileInput      = getEl('fileInput');
+  const fileNameEl     = getEl('fileName');
+  const fileErrorEl    = getEl('fileError');
+  const submitBtn      = getEl('submitBtn');
+  const formTitle      = getEl('formTitle');
+  const formSubtitle   = getEl('formSubtitle');
+
+  let selectedFile = null;
+
+  // Detectar modo edición
+  const url = new URL(window.location.href);
+  const editingId = url.searchParams.get('id') || null;
+
+  // UI inicial según modo
+  if (editingId) {
+    if (formTitle)    formTitle.textContent = 'Editar artículo';
+    if (formSubtitle) formSubtitle.textContent = 'Actualiza título y/o archivo del artículo.';
+    if (submitBtn) {
+      const btnText = submitBtn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'Guardar cambios';
+      else submitBtn.textContent = 'Guardar cambios';
+    }
   } else {
-    setCreateMode();
+    if (formTitle)    formTitle.textContent = 'Nuevo artículo';
+    if (formSubtitle) formSubtitle.textContent = 'Completa los campos para registrar un artículo académico.';
+    if (submitBtn) {
+      const btnText = submitBtn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'Crear artículo';
+      else submitBtn.textContent = 'Crear artículo';
+    }
   }
 
-  bindEvents();
-}
-
-function setCreateMode() {
-  formTitleEl.textContent    = 'Nuevo artículo';
-  formSubtitleEl.textContent = 'Completa los campos para registrar un artículo académico.';
-  submitBtn.querySelector('.btn-text').textContent = 'Crear artículo';
-}
-
-async function loadEditMode(id) {
-  console.log('🔍 Cargando artículo para editar, ID:', id);
-  
-  try {
-    const article = await ArticleManager.getById(id);
-    console.log('📄 Artículo encontrado:', article);
-
-    if (!article) {
-      showToast('Artículo no encontrado. Redirigiendo…', 'error');
-      setTimeout(() => {
-        window.Router.navigate('dashboard');
-      }, 2500);
-      return;
-    }
-
-    // Actualizar UI para modo edición
-    formTitleEl.innerHTML = `
-      <span class="edit-badge">&#9998; Modo edición</span><br>
-      Editar artículo
-    `;
-    formSubtitleEl.textContent = `Modifica los campos y guarda los cambios.`;
-    submitBtn.querySelector('.btn-text').textContent = 'Guardar cambios';
-
-    // Prellenar campos con datos reales
-    titleInput.value = article.title || '';
-    console.log('📝 Título cargado:', article.title);
-
-    if (article.file) {
-      existingFile = article.file;
-      const fileName = article.file.name || 'archivo.pdf';
-      setFileDisplay(`${fileName} (guardado)`, true);
-      
-      // Buscar el botón de selector de archivo si existe
-      const fileBtn = document.getElementById('filePickerBtn') || 
-                      document.querySelector('[onclick*="fileInput.click()"]');
-      if (fileBtn) {
-        fileBtn.textContent = 'Cambiar archivo';
+  // Cargar datos si es edición
+  (async () => {
+    if (!editingId) return;
+    try {
+      const article = await ArticleManager.getById(editingId);
+      if (!article) return;
+      if (titleInput) titleInput.value = article.title || '';
+      if (fileNameEl) {
+        fileNameEl.textContent = article.file?.name
+          ? `Actual: ${article.file.name}`
+          : 'Ningún archivo seleccionado';
       }
-      
-      console.log('📎 Archivo cargado:', fileName);
+      setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'idle', message: '' });
+    } catch (e) {
+      console.warn('No se pudo cargar el artículo en edición:', e);
     }
+  })();
 
-    showToast('✅ Artículo cargado para edición', 'success');
-    
-  } catch (error) {
-    console.error('❌ Error cargando artículo:', error);
-    showToast('Error al cargar el artículo', 'error');
-  }
-}
-
-/* ── Eventos ── */
-
-function bindEvents() {
-  // Verificar si los elementos existen antes de agregar event listeners
-  if (!form || !titleInput || !submitBtn) {
-    console.warn('⚠️ Algunos elementos del formulario no existen, usando fallback');
-    bindFallbackEvents();
-    return;
-  }
-  
-  // Abrir selector de archivos
-  if (filePickerBtn) {
+  // Botón de selección de archivo
+  if (filePickerBtn && fileInput) {
     filePickerBtn.addEventListener('click', () => fileInput.click());
   }
 
-  // Archivo seleccionado desde el input
+  // Listener de cambio de archivo — feedback instantáneo
   if (fileInput) {
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      handleFileSelected(file);
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0] ?? null;
+      selectedFile = file;
+
+      if (!file) {
+        if (fileNameEl) fileNameEl.textContent = 'Ningún archivo seleccionado';
+        setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'idle', message: '' });
+        return;
+      }
+
+      // Feedback amarillo inmediato mientras "procesa"
+      if (fileNameEl) fileNameEl.textContent = file.name;
+      setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'loading', message: '' });
+
+      // Pequeño delay para que se note el estado de carga antes del verde/rojo
+      setTimeout(() => {
+        const verdict = validateFile(file, fileInput);
+        if (verdict.ok) {
+          setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'valid', message: '' });
+        } else {
+          setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'invalid', message: verdict.message });
+        }
+      }, 300);
     });
   }
 
   // Drag & Drop
-  if (fileUploadArea) {
+  if (fileUploadArea && fileInput) {
     fileUploadArea.addEventListener('dragover', (e) => {
       e.preventDefault();
       fileUploadArea.classList.add('drag-over');
@@ -187,152 +207,90 @@ function bindEvents() {
     fileUploadArea.addEventListener('drop', (e) => {
       e.preventDefault();
       fileUploadArea.classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file) handleFileSelected(file);
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+
+      // Inyectar en el input
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+
+      // Disparar change manualmente
+      fileInput.dispatchEvent(new Event('change'));
     });
   }
 
-  // Limpiar error de título al escribir
-  titleInput.addEventListener('input', () => {
-    if (titleError) {
-      titleError.textContent = '';
-      titleInput.classList.remove('is-invalid');
+  // Submit
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const title = (titleInput?.value || '').trim();
+
+    if (!title) {
+      setError(titleError, 'El título es obligatorio.');
+    } else {
+      setError(titleError, '');
+    }
+
+    let fileVerdict = { ok: true, message: '' };
+    if (!editingId) {
+      fileVerdict = validateFile(selectedFile, fileInput);
+    } else if (selectedFile) {
+      fileVerdict = validateFile(selectedFile, fileInput);
+    }
+
+    if (!fileVerdict.ok) {
+      setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'invalid', message: fileVerdict.message });
+    }
+
+    if (!title || !fileVerdict.ok) return;
+
+    // Bloquear botón mientras guarda
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.style.opacity = '0.7';
+    }
+
+    try {
+      if (editingId) {
+        await ArticleManager.update(editingId, { title, file: selectedFile || undefined });
+      } else {
+        await ArticleManager.create({ title, file: selectedFile });
+      }
+
+      // Reset en creación
+      if (!editingId) {
+        if (titleInput) titleInput.value = '';
+        if (fileInput)  fileInput.value = '';
+        selectedFile = null;
+        if (fileNameEl) fileNameEl.textContent = 'Ningún archivo seleccionado';
+        setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'idle', message: '' });
+        setError(titleError, '');
+      }
+
+      try {
+        Router.navigate('dashboard');
+      } catch {
+        // fallback si Router no está disponible
+      }
+
+    } catch (err) {
+      console.error('❌ Error guardando artículo:', err);
+      setFileVisualState({ fileUploadArea, fileNameEl, fileErrorEl, state: 'invalid', message: 'No se pudo guardar el artículo.' });
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+      }
     }
   });
-
-  // Submit del formulario
-  form.addEventListener('submit', handleSubmit);
 }
 
-function bindFallbackEvents() {
-  // Event listeners simples para el formulario básico
-  const form = document.getElementById('articleForm');
-  const titleInput = document.getElementById('articleTitle');
-  const submitBtn = document.getElementById('submitBtn');
-  
-  if (form && titleInput && submitBtn) {
-    console.log('🔧 Usando event listeners fallback');
-    
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      
-      if (!titleInput.value.trim()) {
-        alert('El título es obligatorio');
-        return;
-      }
-      
-      submitBtn.disabled = true;
-      submitBtn.querySelector('.btn-text').textContent = 'Guardando…';
-      
-      try {
-        if (editId) {
-          await ArticleManager.update(editId, {
-            title: titleInput.value,
-            file: selectedFile
-          });
-          showToast('✓ Artículo actualizado correctamente.', 'success');
-        } else {
-          const article = await ArticleManager.create({
-            title: titleInput.value,
-            file: selectedFile
-          });
-          showToast('✓ Artículo creado correctamente.', 'success');
-        }
-        
-        // Redirigir al dashboard después de guardar
-        setTimeout(() => {
-          window.Router.navigate('dashboard');
-        }, 1500);
-        
-      } catch (error) {
-        console.error('Error guardando artículo:', error);
-        showToast('Error al guardar el artículo', 'error');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.querySelector('.btn-text').textContent = editId ? 'Guardar cambios' : 'Crear artículo';
-      }
-    });
-  }
+// Inicializar cuando el DOM esté listo
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initArticleForm);
+} else {
+  initArticleForm();
 }
 
-function handleFileSelected(file) {
-  const allowed = [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  ];
-
-  if (!allowed.includes(file.type)) {
-    fileError.textContent = 'Formato no permitido. Usa PDF o DOCX.';
-    return;
-  }
-
-  const maxMB = 20;
-  if (file.size > maxMB * 1024 * 1024) {
-    fileError.textContent = `El archivo supera el límite de ${maxMB} MB.`;
-    return;
-  }
-
-  fileError.textContent = '';
-  selectedFile = file;
-  setFileDisplay(file.name, true);
-}
-
-async function handleSubmit(e) {
-  e.preventDefault();
-  clearErrors();
-
-  if (!validate()) return;
-
-  submitBtn.disabled = true;
-  submitBtn.querySelector('.btn-text').textContent = 'Guardando…';
-
-  try {
-    if (editId) {
-      await ArticleManager.update(editId, {
-        title: titleInput.value,
-        file:  selectedFile, // puede ser null si no cambió
-      });
-      showToast('✓ Artículo actualizado correctamente.', 'success');
-    } else {
-      const article = await ArticleManager.create({
-        title: titleInput.value,
-        file:  selectedFile,
-      });
-      showToast('✓ Artículo creado correctamente.', 'success');
-
-      // Reset del formulario para otra subida
-      form.reset();
-      selectedFile = null;
-      setFileDisplay('Ningún archivo seleccionado', false);
-      filePickerBtn.textContent = 'Seleccionar archivo';
-
-      // Actualizar URL al modo edición del artículo recién creado
-      // (sin recargar la página)
-      const newUrl = `${window.location.pathname}?id=${article.id}`;
-      window.history.pushState({ id: article.id }, '', newUrl);
-      editId = article.id;
-      existingFile = article.file;
-      titleInput.value = article.title;
-      setFileDisplay(`${article.file.name} (guardado)`, true);
-      await loadEditMode(article.id);
-    }
-  } catch (err) {
-    console.error(err);
-    showToast('Error al guardar el artículo. Inténtalo de nuevo.', 'error');
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.querySelector('.btn-text').textContent =
-      editId ? 'Guardar cambios' : 'Crear artículo';
-  }
-}
-
-/* ── Arranque ── */
-
-// Exponer globalmente para inicialización manual
-window.initArticleForm = init;
-
-// Auto-inicializar si no está en modo dashboard
-if (!window.location.pathname.includes('dashboard.html')) {
-  init();
-}
+window.__initArticleForm = initArticleForm;

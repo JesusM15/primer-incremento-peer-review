@@ -73,6 +73,23 @@ async function initDB() {
       )
     `);
     console.log('✅ Tabla sync_queue creada');
+
+    // Crear tabla de comentarios
+    await appPool.query(`
+      CREATE TABLE IF NOT EXISTS comments (
+        id VARCHAR(255) PRIMARY KEY,
+        article_id VARCHAR(255) NOT NULL,
+        author_id VARCHAR(255) NOT NULL,
+        author_name VARCHAR(255) NOT NULL,
+        author_role VARCHAR(50) NOT NULL,
+        sections JSONB NOT NULL,
+        content TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('✅ Tabla comments creada');
     
     await appPool.end();
     console.log('🎉 Base de datos inicializada correctamente');

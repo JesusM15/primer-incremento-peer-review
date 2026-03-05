@@ -12,6 +12,13 @@ export const ArticleList = {
   _container: null,
   _articles: [],
   _currentFilter: 'all',
+  _renderCache: new Map(),
+  _lastRenderTime: 0,
+  _debouncedRender: null,
+  _visibleArticles: new Set(),
+  _intersectionObserver: null,
+  _itemsPerPage: 10,
+  _currentPage: 1,
 
   /**
    * Inicializa el componente
@@ -24,6 +31,7 @@ export const ArticleList = {
 
     await this._loadArticles();
     this._setupEventListeners();
+    this._setupIntersectionObserver();
     this._render();
 
     console.log('📋 ArticleList inicializado');
@@ -49,24 +57,95 @@ export const ArticleList = {
   },
 
   /**
-   * Configura event listeners
+   * Configura Intersection Observer para lazy loading
    */
-  _setupEventListeners() {
-    // Escuchar cambios de usuario
-    window.addEventListener('userChanged', () => {
-      this._render();
-    });
+  _setupIntersectionObserver() {
+    if (!('IntersectionObserver' in window)) {
+      console.log('⚠️ IntersectionObserver no soportado');
+      return;
+    }
 
-    // Escuchar cambios de artículos (si hay un sistema de eventos)
-    window.addEventListener('articlesChanged', () => {
-      this._loadArticles().then(() => this._render());
-    });
+    this._intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const articleId = entry.target.dataset.articleId;
+            if (articleId && !this._visibleArticles.has(articleId)) {
+              this._visibleArticles.add(articleId);
+              this._loadArticleDetails(articleId);
+            }
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: '50px',
+        threshold: 0.1
+      }
+    );
   },
 
   /**
-   * Renderiza la lista de artículos
+   * Carga detalles de un artículo cuando se vuelve visible
+   */
+  async _loadArticleDetails(articleId) {
+    try {
+      const article = this._articles.find(a => a.id === articleId);
+      if (article && !article.detailsLoaded) {
+        // Simular carga de detalles adicionales
+        article.detailsLoaded = true;
+        console.log(`📖 Cargados detalles del artículo ${articleId}`);
+        
+        // Actualizar solo la tarjeta del artículo específico
+        this._updateArticleCard(articleId);
+      }
+    } catch (error) {
+      console.error(`Error cargando detalles del artículo ${articleId}:`, error);
+    }
+  },
+
+  /**
+   * Actualiza una tarjeta de artículo específica
+   */
+  _updateArticleCard(articleId) {
+    const article = this._articles.find(a => a.id === articleId);
+    if (!article) return;
+
+    const cardElement = this._container.querySelector(`[data-article-id="${articleId}"]`);
+    if (cardElement) {
+      const newHTML = this._renderArticle(article);
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = newHTML;
+      const newCard = tempDiv.firstElementChild;
+      
+      // Reemplazar la tarjeta
+      cardElement.replaceWith(newCard);
+      
+      // Observar la nueva tarjeta
+      if (this._intersectionObserver) {
+        this._intersectionObserver.observe(newCard);
+      }
+    }
+  },
+
+  /**
+   * Renderiza la lista de artículos con optimización
    */
   _render() {
+    // Evitar renders múltiples seguidos con debounce
+    if (this._debouncedRender) {
+      clearTimeout(this._debouncedRender);
+    }
+    
+    this._debouncedRender = setTimeout(() => {
+      this._performRender();
+    }, 16); // ~60fps
+  },
+
+  /**
+   * Realiza el renderizado optimizado
+   */
+  _performRender() {
     if (!this._container) {
       console.error('❌ Container no encontrado');
       return;
@@ -79,18 +158,46 @@ export const ArticleList = {
     console.log('📊 Total artículos:', this._articles.length);
     console.log('🔍 Filtrados:', filteredArticles.length);
     console.log('👤 Usuario:', user);
-    console.log('📦 Container:', this._container);
 
-    /*
-          <span>${user ? `${user.roleIcon} ${user.name}` : 'Usuario no identificado'}</span>
-          ${user ? `<button class="switch-role-btn" onclick="AuthManager.switchRole()">Cambiar rol</button>` : ''}
-    */
+    // Crear cache key para evitar re-renders innecesarios
+    const cacheKey = `${this._currentFilter}_${this._articles.length}_${JSON.stringify(filteredArticles.map(a => a.id + a.status))}`;
+    
+    if (this._renderCache.has(cacheKey)) {
+      const cachedHTML = this._renderCache.get(cacheKey);
+      if (Date.now() - this._lastRenderTime < 1000) { // 1 segundo cache
+        this._container.innerHTML = cachedHTML;
+        this._setupArticleActions();
+        return;
+      }
+    }
 
-    this._container.innerHTML = `
+    const html = this._generateHTML(filteredArticles, user);
+    
+    // Actualizar cache
+    this._renderCache.set(cacheKey, html);
+    this._lastRenderTime = Date.now();
+    
+    // Limitar tamaño del cache
+    if (this._renderCache.size > 10) {
+      const firstKey = this._renderCache.keys().next().value;
+      this._renderCache.delete(firstKey);
+    }
+
+    this._container.innerHTML = html;
+    this._setupArticleActions();
+  },
+
+  /**
+   * Genera HTML de forma optimizada
+   */
+  _generateHTML(filteredArticles, user) {
+    const paginatedArticles = this._getPaginatedArticles();
+    const totalPages = Math.ceil(filteredArticles.length / this._itemsPerPage);
+    
+    return `
       <div class="article-list-header">
         <h2>Tablero de Artículos</h2>
         <div class="user-info">
-
         </div>
       </div>
       
@@ -113,22 +220,18 @@ export const ArticleList = {
       </div>
 
       <div class="articles-grid">
-        ${filteredArticles.length === 0 ? 
+        ${paginatedArticles.length === 0 ? 
           '<div class="empty-state">No hay artículos en esta categoría</div>' :
-          filteredArticles.map(article => this._renderArticle(article)).join('')
+          paginatedArticles.map(article => this._renderArticle(article)).join('')
         }
       </div>
+      
+      ${totalPages > 1 ? `
+        <div class="pagination-info">
+          <span>Página ${this._currentPage} de ${totalPages} (${filteredArticles.length} artículos)</span>
+        </div>
+      ` : ''}
     `;
-
-    // Agregar event listeners a los filtros
-    this._container.querySelectorAll('.filter-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        this._setFilter(e.target.dataset.filter);
-      });
-    });
-
-    // Agregar event listeners a las acciones de artículos
-    this._setupArticleActions();
   },
 
   /**
@@ -140,6 +243,7 @@ export const ArticleList = {
     const canEdit = AuthManager.canPerformAction('edit_article');
     const canStartReview = AuthManager.canPerformAction('start_review', article.status);
     const canApproveReject = AuthManager.canPerformAction('approve_reject', article.status);
+    const canComment = AuthManager.canPerformAction('add_comment');
 
     return `
       <div class="article-card" data-article-id="${article.id}">
@@ -157,6 +261,10 @@ export const ArticleList = {
         </div>
         
         <div class="article-actions">
+          <button class="action-btn view-btn" onclick="window.ArticleList._viewArticle('${article.id}')">
+            👁️ Ver Detalles
+          </button>
+          
           ${canEdit ? `
             <button class="action-btn edit-btn" onclick="window.ArticleList._editArticle('${article.id}')">
               ✏️ Editar
@@ -165,7 +273,7 @@ export const ArticleList = {
           
           ${canStartReview ? `
             <button class="action-btn review-btn" onclick="window.ArticleList._startReview('${article.id}')">
-              👁️ Iniciar Revisión
+              � Iniciar Revisión
             </button>
           ` : ''}
           
@@ -175,6 +283,12 @@ export const ArticleList = {
             </button>
             <button class="action-btn reject-btn" onclick="window.ArticleList._rejectArticle('${article.id}')">
               ❌ Rechazar
+            </button>
+          ` : ''}
+          
+          ${canComment ? `
+            <button class="action-btn comment-btn" onclick="window.ArticleList._commentArticle('${article.id}')">
+              💬 Comentar
             </button>
           ` : ''}
           
@@ -211,6 +325,87 @@ export const ArticleList = {
   },
 
   /**
+   * Configura event listeners
+   */
+  _setupEventListeners() {
+    // Escuchar cambios de usuario
+    window.addEventListener('userChanged', () => {
+      this._render();
+    });
+
+    // Escuchar cambios de artículos (si hay un sistema de eventos)
+    window.addEventListener('articlesChanged', () => {
+      this._loadArticles().then(() => this._render());
+    });
+
+    // Infinite scroll
+    this._container.addEventListener('scroll', this._debounce(() => {
+      this._handleScroll();
+    }, 100));
+  },
+
+  /**
+   * Maneja scroll para infinite loading
+   */
+  _handleScroll() {
+    const scrollTop = this._container.scrollTop;
+    const scrollHeight = this._container.scrollHeight;
+    const clientHeight = this._container.clientHeight;
+
+    // Cargar más artículos cuando falte 20% para llegar al final
+    if (scrollTop + clientHeight >= scrollHeight * 0.8) {
+      this._loadMoreArticles();
+    }
+  },
+
+  /**
+   * Carga más artículos para infinite scroll
+   */
+  _loadMoreArticles() {
+    const filteredArticles = this._getFilteredArticles();
+    const totalPages = Math.ceil(filteredArticles.length / this._itemsPerPage);
+    
+    if (this._currentPage < totalPages) {
+      this._currentPage++;
+      this._render();
+      console.log(`📄 Cargando página ${this._currentPage} de ${totalPages}`);
+    }
+  },
+
+  /**
+   * Obtiene artículos paginados
+   */
+  _getPaginatedArticles() {
+    const filteredArticles = this._getFilteredArticles();
+    const startIndex = (this._currentPage - 1) * this._itemsPerPage;
+    const endIndex = startIndex + this._itemsPerPage;
+    
+    return filteredArticles.slice(startIndex, endIndex);
+  },
+
+  /**
+   * Utilidad para debounce
+   */
+  _debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  },
+
+  /**
+   * Obtiene la cantidad de artículos por estado
+   */
+  _getCountByStatus(status) {
+    return this._articles.filter(article => article.status === status).length;
+  },
+
+  /**
    * Filtra artículos según el filtro actual
    */
   _getFilteredArticles() {
@@ -228,17 +423,11 @@ export const ArticleList = {
   },
 
   /**
-   * Obtiene la cantidad de artículos por estado
-   */
-  _getCountByStatus(status) {
-    return this._articles.filter(article => article.status === status).length;
-  },
-
-  /**
    * Establece el filtro actual
    */
   _setFilter(filter) {
     this._currentFilter = filter;
+    this._currentPage = 1; // Resetear paginación
     this._render();
   },
 
@@ -246,14 +435,19 @@ export const ArticleList = {
    * Configura acciones de artículos
    */
   _setupArticleActions() {
-    // Las acciones se manejan mediante onclick en el HTML
-  },
-
-  /**
-   * Edita un artículo
-   */
-  _editArticle(articleId) {
-    Router.navigate(`edit/${articleId}`);
+    // Agregar event listeners a los filtros
+    this._container.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        this._setFilter(e.target.dataset.filter);
+      });
+    });
+    
+    // Observar tarjetas de artículos para lazy loading
+    if (this._intersectionObserver) {
+      this._container.querySelectorAll('.article-card').forEach(card => {
+        this._intersectionObserver.observe(card);
+      });
+    }
   },
 
   /**
@@ -308,6 +502,22 @@ export const ArticleList = {
       console.error('Error rechazando artículo:', error);
       this._showNotification('Error al rechazar artículo', 'error');
     }
+  },
+
+  /**
+   * Ver detalles de artículo
+   */
+  _viewArticle(articleId) {
+    // Navegar a vista de detalles
+    Router.navigate(`article/${articleId}`);
+  },
+
+  /**
+   * Comentar artículo
+   */
+  _commentArticle(articleId) {
+    // Navegar a vista de detalles con foco en comentarios
+    Router.navigate(`article/${articleId}`);
   },
 
   /**

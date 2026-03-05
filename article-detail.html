@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PeerReview - Detalle de Artículo</title>
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
+    <link rel="stylesheet" href="styles/minimal.css" />
+</head>
+<body>
+    <!-- Header con navegación -->
+    <header class="site-header">
+        <div class="header-inner">
+            <span class="logo">PeerReview</span>
+            <nav class="header-nav">
+                <a href="dashboard.html" class="nav-link">▶ Tablero</a>
+                <a href="index.html" class="nav-link">+ Artículos</a>
+            </nav>
+            <div class="header-user">
+                <span id="user-display" class="user-info"></span>
+                <button id="logout-btn" class="logout-btn" onclick="logout()">
+                    🚪 Cerrar Sesión
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contenido principal -->
+    <main class="main-content">
+        <div id="article-detail" class="article-detail">
+            <!-- Contenido dinámico del artículo -->
+        </div>
+    </main>
+
+    <!-- Verificación de autenticación -->
+    <script type="module">
+        // Verificación simple de sesión activa
+        const savedUser = localStorage.getItem('peerreview_user');
+        
+        if (!savedUser) {
+            console.log('🔍 No hay sesión, redirigiendo a login...');
+            window.location.replace('./login.html');
+        } else {
+            try {
+                const user = JSON.parse(savedUser);
+                if (!user.sessionActive || !user.role) {
+                    console.log('🔍 Sesión inactiva, redirigiendo a login...');
+                    window.location.replace('./login.html');
+                } else {
+                    // Mostrar información del usuario en el header
+                    const userDisplay = document.getElementById('user-display');
+                    if (userDisplay) {
+                        const icons = {
+                            'Autor': '✍️',
+                            'Revisor': '👁️', 
+                            'Editor': '📝'
+                        };
+                        userDisplay.textContent = `${icons[user.role] || '👤'} ${user.name}`;
+                    }
+                }
+            } catch (error) {
+                console.log('🔍 Error en sesión, redirigiendo a login...');
+                window.location.replace('./login.html');
+            }
+        }
+
+        // Función de logout global
+        window.logout = function() {
+            console.log('🚪 Cerrando sesión...');
+            
+            // Marcar sesión como inactiva
+            const savedUser = localStorage.getItem('peerreview_user');
+            if (savedUser) {
+                try {
+                    const user = JSON.parse(savedUser);
+                    user.sessionActive = false;
+                    localStorage.setItem('peerreview_user', JSON.stringify(user));
+                } catch (error) {
+                    console.error('Error actualizando sesión:', error);
+                }
+            }
+            
+            // Limpiar sessionStorage
+            sessionStorage.clear();
+            
+            // Redirigir a login
+            window.location.href = './login.html';
+        };
+    </script>
+
+    <!-- Carga dinámica del artículo -->
+    <script type="module">
+        import { ArticleDetail } from './components/ArticleDetail.js';
+        import { AuthManager } from './components/AuthManager.js';
+        
+        // Función principal para inicializar la vista
+        async function initializeArticleView() {
+            // Obtener ID del artículo de la URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const articleId = urlParams.get('id');
+            
+            if (!articleId) {
+                console.error('❌ No se proporcionó ID de artículo');
+                document.getElementById('article-detail').innerHTML = `
+                    <div class="error-message">
+                        <h2>❌ Error</h2>
+                        <p>No se proporcionó ID de artículo</p>
+                        <a href="dashboard.html" class="btn btn--primary">Volver al Tablero</a>
+                    </div>
+                `;
+                return;
+            }
+            
+            console.log(`📄 Cargando artículo: ${articleId}`);
+            
+            try {
+                // Inicializar AuthManager primero
+                AuthManager.init();
+                
+                // Verificar autenticación después de inicializar
+                const user = AuthManager.getCurrentUser();
+                if (!user) {
+                    console.error('❌ No hay usuario autenticado después de inicializar AuthManager');
+                    document.getElementById('article-detail').innerHTML = `
+                        <div class="error-message">
+                            <h2>❌ Error de Autenticación</h2>
+                            <p>No hay usuario autenticado</p>
+                            <a href="login.html" class="btn btn--primary">Iniciar Sesión</a>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                console.log('👤 Usuario autenticado:', user.role);
+                
+                // Ahora inicializar ArticleDetail
+                await ArticleDetail.init('article-detail', articleId);
+                
+            } catch (error) {
+                console.error('❌ Error inicializando AuthManager o ArticleDetail:', error);
+                document.getElementById('article-detail').innerHTML = `
+                    <div class="error-message">
+                        <h2>❌ Error de Inicialización</h2>
+                        <p>No se pudo inicializar el sistema</p>
+                        <a href="dashboard.html" class="btn btn--primary">Volver al Tablero</a>
+                    </div>
+                `;
+            }
+        }
+        
+        // Inicializar cuando el DOM esté listo
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeArticleView);
+        } else {
+            initializeArticleView();
+        }
+    </script>
+</body>
+</html>

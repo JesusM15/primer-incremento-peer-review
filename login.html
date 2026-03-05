@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Sistema de Revisión por Pares</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #fff;
+            color: #000;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #000;
+        }
+
+        .login-container {
+            width: 90%;
+            max-width: 500px;
+            background: #fff;
+            border: 2px solid #000;
+            padding: 3rem;
+            text-align: center;
+        }
+
+        .login-header {
+            margin-bottom: 2rem;
+        }
+
+        .login-header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            font-weight: normal;
+        }
+
+        .login-header p {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .role-selection {
+            margin: 2rem 0;
+        }
+
+        .role-selection h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1.5rem;
+            font-weight: normal;
+        }
+
+        .role-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .role-btn {
+            padding: 1rem;
+            border: 2px solid #000;
+            background: #fff;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+
+        .role-btn:hover {
+            background: #000;
+            color: #fff;
+            transform: translateX(4px);
+        }
+
+        .role-btn .role-icon {
+            font-size: 1.2rem;
+            margin-right: 0.5rem;
+        }
+
+        .role-btn .role-description {
+            display: block;
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+            opacity: 0.8;
+        }
+
+        .footer {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #000;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        @media (max-width: 600px) {
+            .login-container {
+                padding: 2rem;
+                margin: 1rem;
+            }
+
+            .login-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .role-btn {
+                padding: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🔐 Sistema de Revisión por Pares</h1>
+            <p>Selecciona tu rol para comenzar a usar el sistema</p>
+        </div>
+
+        <div class="role-selection">
+            <h2>¿Cuál es tu rol?</h2>
+            <div class="role-buttons">
+                <button class="role-btn" onclick="selectRole('Autor')">
+                    <span class="role-icon">✍️</span>
+                    <strong>Autor</strong>
+                    <span class="role-description">Puedo crear y editar artículos</span>
+                </button>
+                
+                <button class="role-btn" onclick="selectRole('Revisor')">
+                    <span class="role-icon">👁️</span>
+                    <strong>Revisor</strong>
+                    <span class="role-description">Puedo comentar y aprobar/rechazar artículos</span>
+                </button>
+                
+                <button class="role-btn" onclick="selectRole('Editor')">
+                    <span class="role-icon">📝</span>
+                    <strong>Editor</strong>
+                    <span class="role-description">Puedo gestionar artículos y comentarios</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            Iniciando sesión...
+        </div>
+
+        <div class="footer">
+            <p>Sistema de revisión por pares offline-first</p>
+        </div>
+    </div>
+
+    <script>
+        // Función simple y directa para seleccionar rol
+        function selectRole(role) {
+            console.log('� Rol seleccionado:', role);
+            
+            // Mostrar loading
+            const loading = document.getElementById('loading');
+            loading.classList.add('show');
+            loading.textContent = 'Iniciando sesión...';
+            
+            // Deshabilitar botones
+            document.querySelectorAll('.role-btn').forEach(btn => {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+            });
+            
+            // Crear usuario y guardar en localStorage
+            const user = {
+                id: `user_${Date.now()}`,
+                name: `Usuario ${role}`,
+                role: role,
+                createdAt: new Date().toISOString(),
+                sessionActive: true
+            };
+            
+            // Guardar en localStorage
+            localStorage.setItem('peerreview_user', JSON.stringify(user));
+            console.log('✅ Usuario guardado en localStorage:', user);
+            
+            // Verificar que se guardó
+            const saved = localStorage.getItem('peerreview_user');
+            console.log('� Verificación - Usuario en localStorage:', saved);
+            
+            // Redirigir al dashboard después de un breve delay
+            setTimeout(() => {
+                console.log('🚀 Redirigiendo al dashboard...');
+                window.location.href = './dashboard.html';
+            }, 500);
+        }
+        
+        // Verificar si ya está autenticado al cargar
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('peerreview_user');
+            
+            if (savedUser) {
+                try {
+                    const user = JSON.parse(savedUser);
+                    console.log('� Usuario ya autenticado:', user);
+                    
+                    if (user.sessionActive && user.role) {
+                        console.log('� Redirigiendo al dashboard...');
+                        window.location.href = './dashboard.html';
+                        return;
+                    }
+                } catch (error) {
+                    console.warn('❌ Error leyendo usuario:', error);
+                    localStorage.removeItem('peerreview_user');
+                }
+            }
+            
+            console.log('🔐 Listo para selección de rol');
+        });
+    </script>
+</body>
+</html>

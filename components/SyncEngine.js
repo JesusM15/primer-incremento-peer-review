@@ -1,215 +1,188 @@
 /**
  * components/SyncEngine.js
- * Motor de sincronización offline-first
+ * Motor de sincronización manual (sin auto-sync)
  */
 
 import { SyncDB } from '../db/SyncDB.js';
 import { ArticleDB } from '../db/ArticleDB.js';
+import { CommentManager } from './CommentManager.js';
+import { RequestBatcher } from './RequestBatcher.js';
 
-// API URL dinámica basada en el host actual
 const getApiUrl = () => {
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     return 'http://localhost:3001';
   }
-  return 'http://10.21.60.67:8000';  // IP fija de tu laptop
+  return 'http://10.21.60.67:8000';
 };
 
 export const SyncEngine = {
   _isOnline: navigator.onLine,
   _isSyncing: false,
-  _syncInterval: null,
 
   /**
-   * Inicializa el motor de sincronización
+   * Inicializa — solo escucha conectividad, sin auto-sync ni intervalos
    */
   async init() {
-    console.log('🔄 SyncEngine inicializado');
+    console.log('🔄 SyncEngine inicializado (modo manual)');
     console.log('📡 API URL:', getApiUrl());
 
-    // Escuchar cambios de conectividad
+    RequestBatcher.init();
+
     window.addEventListener('online', () => {
-      console.log('🌐 Conexión restaurada');
       this._isOnline = true;
-      this.syncPendingChanges();
+      console.log('🌐 Conexión restaurada');
     });
 
     window.addEventListener('offline', () => {
-      console.log('📴 Conexión perdida');
       this._isOnline = false;
+      console.log('📴 Conexión perdida');
     });
-
-    // Intentar sincronizar al iniciar si hay conexión
-    if (this._isOnline) {
-      await this.syncPendingChanges();
-    }
-
-    // Configurar sincronización periódica (cada 30 segundos)
-    this._syncInterval = setInterval(() => {
-      if (this._isOnline && !this._isSyncing) {
-        this.syncPendingChanges();
-      }
-    }, 30000);
   },
 
   /**
-   * Sincroniza cambios pendientes con el servidor
+   * Sincronización completa: baja del servidor + sube cambios locales.
+   * Llamar desde el botón flotante.
    */
-  async syncPendingChanges() {
-    if (this._isSyncing || !this._isOnline) return;
+  async sync() {
+    if (this._isSyncing) {
+      return { success: false, message: 'Ya hay una sincronización en curso' };
+    }
+    if (!this._isOnline) {
+      return { success: false, message: 'Sin conexión al servidor' };
+    }
 
     this._isSyncing = true;
-    console.log('📤 Iniciando sincronización...');
+    console.log('🔄 Iniciando sincronización manual...');
 
     try {
-      // 1. PRIMERO: Descargar cambios del servidor (siempre)
-      await this.fetchServerChanges();
+      const downloaded = await this._fetchServerChanges();
+      const uploaded   = await this._pushLocalChanges();
 
-      // 2. Luego, subir operaciones pendientes locales
-      const pendingOps = await SyncDB.getPendingOperations();
+      console.log(`✅ Sync completo — bajados: ${downloaded}, subidos: ${uploaded}`);
 
-      if (pendingOps.length > 0) {
-        console.log(`📦 Enviando ${pendingOps.length} cambios al servidor...`);
+      window.dispatchEvent(new CustomEvent('articlesSynced', {
+        detail: { downloaded, uploaded }
+      }));
 
-        const articlesToSync = pendingOps.map(op => ({
-          ...op.article,
-          _operation: op.operation
-        }));
-
-        const response = await fetch(`${getApiUrl()}/sync`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ articles: articlesToSync })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Error del servidor: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-          await SyncDB.markAsSynced(pendingOps.map(op => op.id));
-          await SyncDB.cleanOldOperations();
-
-          console.log('✅ Sincronización completada');
-
-          // Actualizar artículos locales con datos del servidor
-          await this.updateLocalArticles(result.articles);
-
-          window.dispatchEvent(new CustomEvent('articlesSynced', {
-            detail: { count: pendingOps.length }
-          }));
-        }
-      } else {
-        console.log('✅ No hay cambios locales pendientes');
-      }
-
+      return {
+        success: true,
+        message: `Sincronizado: ${downloaded} bajados, ${uploaded} subidos`,
+        downloaded,
+        uploaded
+      };
     } catch (error) {
       console.error('❌ Error en sincronización:', error.message);
+      return { success: false, message: `Error: ${error.message}` };
     } finally {
       this._isSyncing = false;
     }
   },
 
-  /**
-   * Obtiene cambios del servidor
-   */
-  async fetchServerChanges() {
-    try {
-      console.log('📥 Obteniendo cambios del servidor...');
-      console.log(`📡 URL: ${getApiUrl()}/articles`);
+  async _fetchServerChanges() {
+    let count = 0;
 
-      const response = await fetch(`${getApiUrl()}/articles`);
+    // Artículos
+    const artResponse = await RequestBatcher.addRequest({
+      method: 'GET',
+      url: `${getApiUrl()}/articles`,
+      headers: { 'Cache-Control': 'no-cache' }
+    });
 
-      console.log(`📡 Respuesta status: ${response.status}`);
+    if (!artResponse.ok) throw new Error(`Error descargando artículos: ${artResponse.status}`);
 
-      if (!response.ok) {
-        throw new Error(`Error del servidor: ${response.status}`);
-      }
+    const payload = artResponse.data;
+    const serverArticles = Array.isArray(payload) ? payload : (payload?.articles ?? []);
 
-      const serverArticles = await response.json();
-      console.log(`📡 Artículos recibidos: ${serverArticles.length}`);
-
-      await this.updateLocalArticles(serverArticles);
-
-      console.log(`✅ ${serverArticles.length} artículos actualizados del servidor`);
-
-    } catch (error) {
-      console.error('❌ Error obteniendo cambios del servidor:', error.message);
-      throw error;
+    for (const article of serverArticles) {
+      await ArticleDB.saveWithConflictResolution(article);
+      count++;
     }
+    console.log(`📥 ${serverArticles.length} artículos descargados`);
+
+    // Comentarios
+    const commentResponse = await RequestBatcher.addRequest({
+      method: 'GET',
+      url: `${getApiUrl()}/comments`,
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+
+    if (commentResponse.ok) {
+      const cPayload = commentResponse.data;
+      const serverComments = Array.isArray(cPayload) ? cPayload : (cPayload?.comments ?? []);
+      for (const comment of serverComments) {
+        await CommentManager.syncCommentFromServer(comment);
+      }
+      console.log(`📥 ${serverComments.length} comentarios descargados`);
+    }
+
+    return count;
   },
 
-  /**
-   * Actualiza artículos locales con datos del servidor
-   * Mantiene el último cambio (estrategia "last write wins")
-   */
-  async updateLocalArticles(serverArticles) {
-    for (const serverArticle of serverArticles) {
-      try {
-        const localArticle = {
-          id: serverArticle.id,
-          title: serverArticle.title,
-          file: serverArticle.file,
-          status: serverArticle.status,
-          createdAt: serverArticle.created_at,
-          updatedAt: serverArticle.updated_at,
-          rejectionReason: serverArticle.rejection_reason
-        };
+  async _pushLocalChanges() {
+    const pendingOps = await SyncDB.getPendingOperations();
+    if (pendingOps.length === 0) {
+      console.log('✅ No hay cambios locales pendientes');
+      return 0;
+    }
 
-        const localExisting = await ArticleDB.getById(localArticle.id);
+    console.log(`📤 Subiendo ${pendingOps.length} cambios locales...`);
 
-        if (!localExisting) {
-          await ArticleDB.save(localArticle);
-          console.log(`⬇️ Artículo descargado: ${localArticle.title}`);
-        } else {
-          const serverTime = new Date(localArticle.updatedAt).getTime();
-          const localTime = new Date(localExisting.updatedAt).getTime();
+    const commentOps = pendingOps.filter(op => op.operation.includes('COMMENT'));
+    const articleOps = pendingOps.filter(op => !op.operation.includes('COMMENT'));
 
-          if (serverTime > localTime) {
-            await ArticleDB.save(localArticle);
-            console.log(`🔄 Artículo actualizado del servidor: ${localArticle.title}`);
-          }
+    if (articleOps.length > 0) {
+      const response = await RequestBatcher.addRequest({
+        method: 'POST',
+        url: `${getApiUrl()}/sync`,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articles: articleOps.map(op => ({ ...op.article, _operation: op.operation })) })
+      });
+
+      if (!response.ok) throw new Error(`Error subiendo artículos: ${response.status}`);
+
+      if (response.data?.success) {
+        await SyncDB.markAsSynced(articleOps.map(op => op.id));
+        if (response.data.articles) {
+          for (const a of response.data.articles) await ArticleDB.saveWithConflictResolution(a);
         }
-
-      } catch (error) {
-        console.error(`Error actualizando artículo ${serverArticle.id}:`, error);
+        console.log(`📤 ${articleOps.length} artículos subidos`);
       }
     }
-  },
 
-  /**
-   * Fuerza sincronización manual
-   */
-  async forceSync() {
-    if (!this._isOnline) {
-      console.log('📴 Sin conexión. Los cambios se sincronizarán cuando haya internet.');
-      return false;
+    if (commentOps.length > 0) {
+      const commentResponse = await RequestBatcher.addRequest({
+        method: 'POST',
+        url: `${getApiUrl()}/sync/comments`,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comments: commentOps.map(op => ({ ...op.article, _operation: op.operation })) })
+      });
+
+      if (commentResponse.ok && !commentResponse.data?.error) {
+        await SyncDB.markAsSynced(commentOps.map(op => op.id));
+        console.log(`📤 ${commentOps.length} comentarios subidos`);
+      }
     }
 
-    await this.syncPendingChanges();
-    return true;
+    await SyncDB.cleanOldOperations();
+    return pendingOps.length;
   },
 
-  /**
-   * Obtiene estado de sincronización
-   */
   getStatus() {
-    return {
-      isOnline: this._isOnline,
-      isSyncing: this._isSyncing,
-      pendingCount: SyncDB.getPendingCount()
-    };
+    return { isOnline: this._isOnline, isSyncing: this._isSyncing };
   },
 
-  /**
-   * Detiene el motor de sincronización
-   */
+  // Compatibilidad con código existente que use forceSync()
+  async forceSync() {
+    return this.sync();
+  },
+
+  // Compatibilidad con código existente que use syncPendingChanges()
+  async syncPendingChanges() {
+    return this.sync();
+  },
+
   stop() {
-    if (this._syncInterval) {
-      clearInterval(this._syncInterval);
-      this._syncInterval = null;
-    }
+    RequestBatcher.stop();
     console.log('🛑 SyncEngine detenido');
   }
 };

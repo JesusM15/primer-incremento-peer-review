@@ -32,13 +32,15 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
 
         except urllib.error.HTTPError as e:
             self.send_response(e.code)
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(e.read())
         except Exception as e:
             self.send_response(503)
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
 
-    API_PATHS = ('/articles', '/sync', '/ping', '/health')
+    API_PATHS = ('/articles', '/sync', '/ping', '/health', '/comments')
 
     def _is_api(self):
         return any(self.path.startswith(p) for p in self.API_PATHS)
@@ -77,5 +79,6 @@ if __name__ == '__main__':
     PORT = 8000
     with socketserver.TCPServer(('0.0.0.0', PORT), ProxyHandler) as httpd:
         print(f'✅ Frontend en  http://0.0.0.0:{PORT}')
-        print(f'🔀 Proxy API -> http://localhost:3001')
+        print(f'🔀 Proxy API -> {BACKEND}')
+        print(f'📡 Rutas API: {ProxyHandler.API_PATHS}')
         httpd.serve_forever()
