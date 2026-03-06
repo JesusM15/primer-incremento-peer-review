@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,8 +9,11 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
   <title>PeerReview — Gestión de Artículos</title>
+  <!-- Preload recursos críticos para reducir render-blocking -->
+  <link rel="preload" href="styles/minimal.css" as="style" />
   <link rel="stylesheet" href="styles/minimal.css" />
 </head>
+
 <body>
   <header class="site-header">
     <div class="header-inner">
@@ -40,15 +44,8 @@
             <label class="field-label" for="articleTitle">
               Título del artículo <span class="required">*</span>
             </label>
-            <input
-              type="text"
-              id="articleTitle"
-              name="articleTitle"
-              class="field-input"
-              placeholder="Ej. Impacto del cambio climático en ecosistemas árticos"
-              autocomplete="off"
-              required
-            />
+            <input type="text" id="articleTitle" name="articleTitle" class="field-input"
+              placeholder="Ej. Impacto del cambio climático en ecosistemas árticos" autocomplete="off" required />
             <span class="field-error" id="titleError"></span>
           </div>
 
@@ -65,12 +62,9 @@
               <button type="button" class="btn btn--ghost" id="filePickerBtn">
                 Seleccionar archivo
               </button>
-              <input
-                type="file"
-                id="fileInput"
+              <input type="file" id="fileInput"
                 accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                hidden
-              />
+                hidden />
             </div>
             <span class="field-error" id="fileError"></span>
           </div>
@@ -92,7 +86,7 @@
   <script type="module">
     // Verificación simple de sesión activa
     const savedUser = localStorage.getItem('peerreview_user');
-    
+
     if (!savedUser) {
       console.log('🔍 No hay sesión, redirigiendo a login...');
       window.location.replace('./login.html');
@@ -108,7 +102,7 @@
           if (userDisplay) {
             const icons = {
               'Autor': '✍️',
-              'Revisor': '👁️', 
+              'Revisor': '👁️',
               'Editor': '📝'
             };
             userDisplay.textContent = `${icons[user.role] || '👤'} ${user.name}`;
@@ -121,9 +115,9 @@
     }
 
     // Función de logout global
-    window.logout = function() {
+    window.logout = function () {
       console.log('🚪 Cerrando sesión...');
-      
+
       // Marcar sesión como inactiva
       const savedUser = localStorage.getItem('peerreview_user');
       if (savedUser) {
@@ -135,10 +129,10 @@
           console.error('Error actualizando sesión:', error);
         }
       }
-      
+
       // Limpiar sessionStorage
       sessionStorage.clear();
-      
+
       // Redirigir a login
       window.location.href = './login.html';
     };
@@ -167,4 +161,5 @@
     }
   </script>
 </body>
+
 </html>

@@ -95,7 +95,7 @@ export const ArticleList = {
         // Simular carga de detalles adicionales
         article.detailsLoaded = true;
         console.log(`📖 Cargados detalles del artículo ${articleId}`);
-        
+
         // Actualizar solo la tarjeta del artículo específico
         this._updateArticleCard(articleId);
       }
@@ -117,10 +117,10 @@ export const ArticleList = {
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = newHTML;
       const newCard = tempDiv.firstElementChild;
-      
+
       // Reemplazar la tarjeta
       cardElement.replaceWith(newCard);
-      
+
       // Observar la nueva tarjeta
       if (this._intersectionObserver) {
         this._intersectionObserver.observe(newCard);
@@ -136,7 +136,7 @@ export const ArticleList = {
     if (this._debouncedRender) {
       clearTimeout(this._debouncedRender);
     }
-    
+
     this._debouncedRender = setTimeout(() => {
       this._performRender();
     }, 16); // ~60fps
@@ -153,7 +153,7 @@ export const ArticleList = {
 
     const user = AuthManager.getCurrentUser();
     const filteredArticles = this._getFilteredArticles();
-    
+
     console.log('🎨 Renderizando ArticleList:');
     console.log('📊 Total artículos:', this._articles.length);
     console.log('🔍 Filtrados:', filteredArticles.length);
@@ -161,7 +161,7 @@ export const ArticleList = {
 
     // Crear cache key para evitar re-renders innecesarios
     const cacheKey = `${this._currentFilter}_${this._articles.length}_${JSON.stringify(filteredArticles.map(a => a.id + a.status))}`;
-    
+
     if (this._renderCache.has(cacheKey)) {
       const cachedHTML = this._renderCache.get(cacheKey);
       if (Date.now() - this._lastRenderTime < 1000) { // 1 segundo cache
@@ -172,11 +172,11 @@ export const ArticleList = {
     }
 
     const html = this._generateHTML(filteredArticles, user);
-    
+
     // Actualizar cache
     this._renderCache.set(cacheKey, html);
     this._lastRenderTime = Date.now();
-    
+
     // Limitar tamaño del cache
     if (this._renderCache.size > 10) {
       const firstKey = this._renderCache.keys().next().value;
@@ -193,7 +193,7 @@ export const ArticleList = {
   _generateHTML(filteredArticles, user) {
     const paginatedArticles = this._getPaginatedArticles();
     const totalPages = Math.ceil(filteredArticles.length / this._itemsPerPage);
-    
+
     return `
       <div class="article-list-header">
         <h2>Tablero de Artículos</h2>
@@ -220,10 +220,10 @@ export const ArticleList = {
       </div>
 
       <div class="articles-grid">
-        ${paginatedArticles.length === 0 ? 
-          '<div class="empty-state">No hay artículos en esta categoría</div>' :
-          paginatedArticles.map(article => this._renderArticle(article)).join('')
-        }
+        ${paginatedArticles.length === 0 ?
+        '<div class="empty-state">No hay artículos en esta categoría</div>' :
+        paginatedArticles.map(article => this._renderArticle(article)).join('')
+      }
       </div>
       
       ${totalPages > 1 ? `
@@ -238,12 +238,19 @@ export const ArticleList = {
    * Renderiza un artículo individual
    */
   _renderArticle(article) {
-    const user = AuthManager.getCurrentUser();
+    const role = AuthManager.getCurrentRole();
     const statusClass = this._getStatusClass(article.status);
-    const canEdit = AuthManager.canPerformAction('edit_article');
+
+    // ── Permisos por rol ────────────────────────────────────────────────────
+    // Autor   → Ver Detalles | Editar | Eliminar
+    // Revisor → Comentar | Iniciar Revisión | Aceptar | Rechazar
+    // Editor  → Comentar | Editar | Eliminar | Iniciar Revisión | Aceptar | Rechazar
+    const canViewDetails = role === 'Autor';
+    const canEdit = AuthManager.canPerformAction('edit_article');         // Autor + Editor
+    const canDelete = AuthManager.canPerformAction('delete_article');       // Autor + Editor
+    const canComment = AuthManager.canPerformAction('add_comment');          // Revisor + Editor
     const canStartReview = AuthManager.canPerformAction('start_review', article.status);
     const canApproveReject = AuthManager.canPerformAction('approve_reject', article.status);
-    const canComment = AuthManager.canPerformAction('add_comment');
 
     return `
       <div class="article-card" data-article-id="${article.id}">
@@ -251,7 +258,7 @@ export const ArticleList = {
           <h3 class="article-title">${this._escapeHtml(article.title)}</h3>
           <span class="article-status ${statusClass}">${article.status}</span>
         </div>
-        
+
         <div class="article-info">
           <p class="article-date">
             Creado: ${new Date(article.createdAt).toLocaleDateString('es-ES')}
@@ -259,24 +266,32 @@ export const ArticleList = {
           ${article.file ? `<p class="article-file">📄 ${this._escapeHtml(article.file.name)}</p>` : ''}
           <p class="article-id">ID: ${article.id}</p>
         </div>
-        
+
         <div class="article-actions">
-          <button class="action-btn view-btn" onclick="window.ArticleList._viewArticle('${article.id}')">
-            👁️ Ver Detalles
-          </button>
-          
+          ${canViewDetails ? `
+            <button class="action-btn view-btn" onclick="window.ArticleList._viewArticle('${article.id}')">
+              👁️ Ver Detalles
+            </button>
+          ` : ''}
+
+          ${canComment ? `
+            <button class="action-btn comment-btn" onclick="window.ArticleList._commentArticle('${article.id}')">
+              💬 Comentar
+            </button>
+          ` : ''}
+
           ${canEdit ? `
             <button class="action-btn edit-btn" onclick="window.ArticleList._editArticle('${article.id}')">
               ✏️ Editar
             </button>
           ` : ''}
-          
+
           ${canStartReview ? `
             <button class="action-btn review-btn" onclick="window.ArticleList._startReview('${article.id}')">
-              � Iniciar Revisión
+              🔄 Iniciar Revisión
             </button>
           ` : ''}
-          
+
           ${canApproveReject ? `
             <button class="action-btn approve-btn" onclick="window.ArticleList._approveArticle('${article.id}')">
               ✅ Aceptar
@@ -285,14 +300,8 @@ export const ArticleList = {
               ❌ Rechazar
             </button>
           ` : ''}
-          
-          ${canComment ? `
-            <button class="action-btn comment-btn" onclick="window.ArticleList._commentArticle('${article.id}')">
-              💬 Comentar
-            </button>
-          ` : ''}
-          
-          ${canEdit ? `
+
+          ${canDelete ? `
             <button class="action-btn delete-btn" onclick="window.ArticleList._deleteArticle('${article.id}')">
               🗑️ Eliminar
             </button>
@@ -301,6 +310,7 @@ export const ArticleList = {
       </div>
     `;
   },
+
 
   /**
    * Obtiene la clase CSS para el estado
@@ -364,7 +374,7 @@ export const ArticleList = {
   _loadMoreArticles() {
     const filteredArticles = this._getFilteredArticles();
     const totalPages = Math.ceil(filteredArticles.length / this._itemsPerPage);
-    
+
     if (this._currentPage < totalPages) {
       this._currentPage++;
       this._render();
@@ -379,7 +389,7 @@ export const ArticleList = {
     const filteredArticles = this._getFilteredArticles();
     const startIndex = (this._currentPage - 1) * this._itemsPerPage;
     const endIndex = startIndex + this._itemsPerPage;
-    
+
     return filteredArticles.slice(startIndex, endIndex);
   },
 
@@ -411,12 +421,12 @@ export const ArticleList = {
   _getFilteredArticles() {
     console.log('🔍 Filtrando artículos:', this._currentFilter);
     console.log('📋 Artículos disponibles:', this._articles.map(a => ({ id: a.id, status: a.status })));
-    
+
     if (this._currentFilter === 'all') {
       console.log('✅ Filtro "all", retornando todos');
       return this._articles;
     }
-    
+
     const filtered = this._articles.filter(article => article.status === this._currentFilter);
     console.log('🎯 Resultado filtrado:', filtered.map(a => ({ id: a.id, status: a.status })));
     return filtered;
@@ -441,7 +451,7 @@ export const ArticleList = {
         this._setFilter(e.target.dataset.filter);
       });
     });
-    
+
     // Observar tarjetas de artículos para lazy loading
     if (this._intersectionObserver) {
       this._container.querySelectorAll('.article-card').forEach(card => {
@@ -458,7 +468,7 @@ export const ArticleList = {
       await ArticleManager.update(articleId, { status: 'En Revisión' });
       await this._loadArticles();
       this._render();
-      
+
       // Mostrar notificación
       this._showNotification('Artículo enviado a revisión', 'success');
     } catch (error) {
@@ -475,7 +485,7 @@ export const ArticleList = {
       await ArticleManager.update(articleId, { status: 'Aceptado' });
       await this._loadArticles();
       this._render();
-      
+
       this._showNotification('Artículo aceptado', 'success');
     } catch (error) {
       console.error('Error aprobando artículo:', error);
@@ -488,15 +498,15 @@ export const ArticleList = {
    */
   async _rejectArticle(articleId) {
     const reason = prompt('Motivo del rechazo (opcional):');
-    
+
     try {
-      await ArticleManager.update(articleId, { 
+      await ArticleManager.update(articleId, {
         status: 'Rechazado',
         rejectionReason: reason || 'Sin motivo especificado'
       });
       await this._loadArticles();
       this._render();
-      
+
       this._showNotification('Artículo rechazado', 'error');
     } catch (error) {
       console.error('Error rechazando artículo:', error);
@@ -508,16 +518,24 @@ export const ArticleList = {
    * Ver detalles de artículo
    */
   _viewArticle(articleId) {
-    // Navegar a vista de detalles
     Router.navigate(`article/${articleId}`);
+  },
+
+  /**
+   * Editar artículo
+   */
+  _editArticle(articleId) {
+    Router.navigate(`edit/${articleId}`);
   },
 
   /**
    * Comentar artículo
    */
   _commentArticle(articleId) {
-    // Navegar a vista de detalles con foco en comentarios
+    // Navegar a detalles con flag para hacer scroll/abrir sección de comentarios
     Router.navigate(`article/${articleId}`);
+    // Usamos sessionStorage para pasar el flag (el router hashchange llega después)
+    sessionStorage.setItem('focusComments', '1');
   },
 
   /**

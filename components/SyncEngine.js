@@ -8,12 +8,8 @@ import { ArticleDB } from '../db/ArticleDB.js';
 import { CommentManager } from './CommentManager.js';
 import { RequestBatcher } from './RequestBatcher.js';
 
-const getApiUrl = () => {
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    return 'http://localhost:3001';
-  }
-  return 'http://10.21.60.67:8000';
-};
+const getApiUrl = () => location.origin;
+
 
 export const SyncEngine = {
   _isOnline: navigator.onLine,
@@ -56,7 +52,7 @@ export const SyncEngine = {
 
     try {
       const downloaded = await this._fetchServerChanges();
-      const uploaded   = await this._pushLocalChanges();
+      const uploaded = await this._pushLocalChanges();
 
       console.log(`✅ Sync completo — bajados: ${downloaded}, subidos: ${uploaded}`);
 
@@ -94,8 +90,8 @@ export const SyncEngine = {
     const serverArticles = Array.isArray(payload) ? payload : (payload?.articles ?? []);
 
     for (const article of serverArticles) {
-      await ArticleDB.saveWithConflictResolution(article);
-      count++;
+      const changed = await ArticleDB.saveWithConflictResolution(article);
+      if (changed) count++;
     }
     console.log(`📥 ${serverArticles.length} artículos descargados`);
 

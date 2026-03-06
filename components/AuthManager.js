@@ -16,14 +16,14 @@ export const AuthManager = {
     if (savedUser) {
       try {
         this._currentUser = JSON.parse(savedUser);
-        
+
         // Validar que la sesión esté activa y tenga datos válidos
         if (!this._currentUser.sessionActive || !this._currentUser.id || !this._currentUser.role) {
           console.warn('⚠️ Sesión inválida o inactiva, limpiando');
           this._clearInvalidSession();
           return;
         }
-        
+
         console.log('👤 Sesión activa encontrada:', this._currentUser.role);
         return;
       } catch (error) {
@@ -54,7 +54,7 @@ export const AuthManager = {
     if (window.location.pathname.includes('login.html')) {
       return;
     }
-    
+
     // Forzar recarga completa para limpiar estado
     window.location.replace('./login.html');
   },
@@ -94,26 +94,26 @@ export const AuthManager = {
    */
   canPerformAction(action, articleStatus = null) {
     const role = this.getCurrentRole();
-    
+
     switch (action) {
       case 'create_article':
         return role === 'Autor';
-        
+
       case 'edit_article':
-        return role === 'Autor';
-        
+        return role === 'Autor' || role === 'Editor';
+
       case 'start_review':
         return (role === 'Editor' || role === 'Revisor') && articleStatus === 'Recibido';
-        
+
       case 'add_comment':
         return role === 'Editor' || role === 'Revisor';
-        
+
       case 'approve_reject':
         return (role === 'Editor' || role === 'Revisor') && articleStatus === 'En Revisión';
-        
+
       case 'delete_article':
         return role === 'Autor' || role === 'Editor';
-        
+
       default:
         return false;
     }
@@ -133,7 +133,7 @@ export const AuthManager = {
    */
   _setUserRole(role) {
     console.log('🔧 _setUserRole llamado con:', role);
-    
+
     this._currentUser = {
       id: `user_${Date.now()}`,
       name: `Usuario ${role}`,
@@ -157,7 +157,7 @@ export const AuthManager = {
     }));
 
     console.log(`👤 Rol establecido: ${role}`);
-    
+
     // Pequeña pausa antes de redirigir para asegurar que se guarde
     setTimeout(() => {
       console.log('🔧 Ejecutando redirección a dashboard...');
@@ -170,16 +170,16 @@ export const AuthManager = {
    */
   switchRole() {
     console.log('🔄 Cambiando rol...');
-    
+
     // Limpiar localStorage
     localStorage.removeItem('peerreview_user');
-    
+
     // Limpiar estado actual
     this._currentUser = null;
-    
+
     // Limpiar cualquier estado de sesión adicional
     sessionStorage.clear();
-    
+
     // Forzar recarga para limpiar estado
     window.location.href = './login.html';
   },
@@ -189,22 +189,22 @@ export const AuthManager = {
    */
   logout() {
     console.log('🚪 Cerrando sesión...');
-    
+
     // Marcar sesión como inactiva
     if (this._currentUser) {
       this._currentUser.sessionActive = false;
       localStorage.setItem('peerreview_user', JSON.stringify(this._currentUser));
     }
-    
+
     // Limpiar estado actual
     this._currentUser = null;
-    
+
     // Limpiar cualquier estado de sesión adicional
     sessionStorage.clear();
-    
+
     // Disparar evento de logout
     window.dispatchEvent(new CustomEvent('userLoggedOut'));
-    
+
     // Forzar recarga para limpiar estado de la aplicación
     window.location.href = './login.html';
   },
@@ -218,7 +218,7 @@ export const AuthManager = {
 
     const icons = {
       'Autor': '✍️',
-      'Revisor': '👁️', 
+      'Revisor': '👁️',
       'Editor': '📝'
     };
 

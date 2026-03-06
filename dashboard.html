@@ -1,12 +1,19 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PeerReview - Tablero de Control</title>
+  <meta name="theme-color" content="#1976d2" />
+  <meta name="description" content="Tablero de control para gestión y revisión de artículos académicos" />
+  <title>PeerReview — Tablero de Control</title>
+  <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
+  <!-- Preload recursos críticos para reducir render-blocking -->
+  <link rel="preload" href="styles/minimal.css" as="style" />
   <link rel="stylesheet" href="styles/minimal.css" />
 </head>
+
 <body>
 
   <!-- Header -->
@@ -64,7 +71,7 @@
         const u = JSON.parse(localStorage.getItem('peerreview_user') || '{}');
         u.sessionActive = false;
         localStorage.setItem('peerreview_user', JSON.stringify(u));
-      } catch {}
+      } catch { }
       sessionStorage.clear();
       window.location.href = './login.html';
     };
@@ -72,12 +79,12 @@
 
   <!-- App -->
   <script type="module">
-    import { Router }           from './components/Router.js';
-    import { SyncEngine }       from './components/SyncEngine.js';
-    import { SyncButton }       from './components/SyncButton.js';
+    import { Router } from './components/Router.js';
+    import { SyncEngine } from './components/SyncEngine.js';
+    import { SyncButton } from './components/SyncButton.js';
     import { ConnectionStatus } from './components/ConnectionStatus.js';
-    import { ArticleDetail }    from './components/ArticleDetail.js';
-    import { AuthManager }      from './components/AuthManager.js';
+    import { ArticleDetail } from './components/ArticleDetail.js';
+    import { AuthManager } from './components/AuthManager.js';
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -98,8 +105,8 @@
               <h1 id="formTitle">${editId ? 'Editar artículo' : 'Nuevo artículo'}</h1>
               <p class="form-subtitle" id="formSubtitle">
                 ${editId
-                  ? 'Actualiza título y/o archivo del artículo.'
-                  : 'Completa los campos para registrar un artículo académico.'}
+          ? 'Actualiza título y/o archivo del artículo.'
+          : 'Completa los campos para registrar un artículo académico.'}
               </p>
             </div>
             <form id="articleForm" class="article-form" novalidate>
@@ -251,4 +258,5 @@
   </script>
 
 </body>
+
 </html>

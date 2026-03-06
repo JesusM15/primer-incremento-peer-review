@@ -26,15 +26,47 @@ export const ArticleDetail = {
       // Cargar artículo y comentarios
       await this._loadArticle(articleId);
       await this._loadComments(articleId);
-      
+
       // Renderizar vista
       this._render();
-      
+
+      // Si venimos del botón "Comentar", abrir secciones y hacer scroll
+      if (sessionStorage.getItem('focusComments') === '1') {
+        sessionStorage.removeItem('focusComments');
+        this._focusCommentSection();
+      }
+
       console.log(`📄 Vista de detalle inicializada para artículo ${articleId}`);
     } catch (error) {
       console.error('❌ Error inicializando vista de detalle:', error);
       this._renderError(error.message);
     }
+  },
+
+  /**
+   * Abre la primera sección de comentarios y hace scroll hasta ella.
+   * Se llama cuando el usuario navega desde el botón "Comentar".
+   */
+  _focusCommentSection() {
+    // Abrir la primera sección disponible
+    const firstSection = this._container.querySelector('.comment-section');
+    if (!firstSection) return;
+
+    const sectionName = firstSection.dataset.section;
+    if (sectionName) {
+      // Abrir el dropdown de la primera sección
+      const content = document.getElementById(`section-${sectionName}`);
+      const icon = firstSection.querySelector('.toggle-icon');
+      if (content) {
+        content.style.display = 'block';
+        if (icon) icon.textContent = '▲';
+      }
+    }
+
+    // Scroll suave hasta la sección
+    setTimeout(() => {
+      firstSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
   },
 
   /**
@@ -59,14 +91,14 @@ export const ArticleDetail = {
     try {
       console.log(`📝 Cargando comentarios para artículo: ${articleId}`);
       const comments = await CommentManager.getComments(articleId);
-      
+
       // Verificar que comments sea un array
       if (!Array.isArray(comments)) {
         console.warn('⚠️ _loadComments: comentarios no es un array:', comments);
         this._comments = [];
         return;
       }
-      
+
       console.log(`📝 Se encontraron ${comments.length} comentarios`);
       this._comments = CommentManager.formatCommentsForDisplay(comments);
       console.log(`📝 Comentarios formateados: ${this._comments.length}`);
@@ -127,7 +159,7 @@ export const ArticleDetail = {
    */
   _renderArticleContent() {
     const user = AuthManager.getCurrentUser();
-    
+
     // Verificar que el usuario exista
     if (!user) {
       console.error('❌ No hay usuario autenticado');
@@ -139,9 +171,9 @@ export const ArticleDetail = {
         </div>
       `;
     }
-    
+
     const isAuthor = user.role === 'Autor';
-    
+
     return `
       <div class="article-content">
         ${isAuthor ? this._renderAuthorView() : this._renderReviewerView()}
@@ -168,7 +200,7 @@ export const ArticleDetail = {
   _renderAuthorCommentSections() {
     const sections = [
       'introduccion',
-      'metodologia', 
+      'metodologia',
       'resultados',
       'discusion',
       'conclusiones',
@@ -177,10 +209,10 @@ export const ArticleDetail = {
     ];
 
     return sections.map(section => {
-      const sectionComments = this._comments.filter(comment => 
+      const sectionComments = this._comments.filter(comment =>
         comment.sections && comment.sections[section]
       );
-      
+
       // Solo mostrar sección si tiene comentarios
       if (sectionComments.length === 0) {
         return '';
@@ -255,7 +287,7 @@ export const ArticleDetail = {
   _renderCommentSections() {
     const sections = [
       'introduccion',
-      'metodologia', 
+      'metodologia',
       'resultados',
       'discusion',
       'conclusiones',
@@ -294,7 +326,7 @@ export const ArticleDetail = {
    * Obtiene comentarios de una sección específica
    */
   _getSectionComments(sectionName) {
-    const sectionComments = this._comments.filter(comment => 
+    const sectionComments = this._comments.filter(comment =>
       comment.formattedSections && comment.formattedSections[sectionName]
     );
 
@@ -444,14 +476,14 @@ export const ArticleDetail = {
   async _changeStatus(newStatus) {
     try {
       await ArticleManager.update(this._article.id, { status: newStatus });
-      
+
       // Actualizar artículo local
       this._article.status = newStatus;
       this._article.updatedAt = new Date().toISOString();
-      
+
       // Re-renderizar
       this._render();
-      
+
       Toast.success(`Artículo ${newStatus.toLowerCase()}`);
     } catch (error) {
       console.error('❌ Error cambiando estado:', error);
@@ -487,11 +519,11 @@ export const ArticleDetail = {
 
     try {
       await CommentManager.deleteComment(commentId);
-      
+
       // Recargar comentarios
       await this._loadComments(this._article.id);
       this._render();
-      
+
     } catch (error) {
       console.error('❌ Error eliminando comentario:', error);
     }
@@ -567,7 +599,7 @@ export const ArticleDetail = {
   _toggleSection(sectionName) {
     const sectionContent = document.getElementById(`section-${sectionName}`);
     const toggleIcon = document.querySelector(`[data-section="${sectionName}"] .toggle-icon`);
-    
+
     if (sectionContent) {
       const isVisible = sectionContent.style.display !== 'none';
       sectionContent.style.display = isVisible ? 'none' : 'block';
@@ -584,7 +616,7 @@ export const ArticleDetail = {
     try {
       const textarea = document.getElementById(`comment-${sectionName}`);
       const commentText = textarea.value.trim();
-      
+
       if (!commentText) {
         Toast.warning('Debes escribir un comentario');
         return;
@@ -594,16 +626,16 @@ export const ArticleDetail = {
       sections[sectionName] = commentText;
 
       await CommentManager.addComment(this._article.id, { sections });
-      
+
       // Limpiar textarea
       textarea.value = '';
-      
+
       // Recargar comentarios
       await this._loadComments(this._article.id);
       this._render();
-      
+
       Toast.success('Comentario agregado correctamente');
-      
+
     } catch (error) {
       console.error('❌ Error agregando comentario:', error);
       Toast.error('Error al agregar comentario');

@@ -3,7 +3,7 @@
  * Wrapper minimalista sobre IndexedDB para artículos académicos.
  */
 
-const DB_NAME    = 'PeerReviewDB';
+const DB_NAME = 'PeerReviewDB';
 const DB_VERSION = 3;
 const STORE_NAME = 'articles';
 const COMMENTS_STORE = 'comments';
@@ -16,19 +16,19 @@ function openDB() {
       const db = event.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        store.createIndex('status',    'status',    { unique: false });
+        store.createIndex('status', 'status', { unique: false });
         store.createIndex('createdAt', 'createdAt', { unique: false });
       }
 
       if (!db.objectStoreNames.contains(COMMENTS_STORE)) {
         const commentStore = db.createObjectStore(COMMENTS_STORE, { keyPath: 'id' });
         commentStore.createIndex('articleId', 'articleId', { unique: false });
-        commentStore.createIndex('authorId',  'authorId',  { unique: false });
+        commentStore.createIndex('authorId', 'authorId', { unique: false });
       }
     };
 
     request.onsuccess = (event) => resolve(event.target.result);
-    request.onerror   = (event) => reject(event.target.error);
+    request.onerror = (event) => reject(event.target.error);
   });
 }
 
@@ -37,10 +37,10 @@ export const ArticleDB = {
   async save(article) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(STORE_NAME, 'readwrite');
+      const tx = db.transaction(STORE_NAME, 'readwrite');
       const request = tx.objectStore(STORE_NAME).put(article);
       request.onsuccess = () => resolve(article);
-      request.onerror   = (e) => reject(e.target.error);
+      request.onerror = (e) => reject(e.target.error);
     });
   },
 
@@ -51,12 +51,12 @@ export const ArticleDB = {
   async saveWithConflictResolution(serverArticle) {
     // Normalizar formato servidor → local
     const incoming = {
-      id:              serverArticle.id,
-      title:           serverArticle.title,
-      file:            serverArticle.file,
-      status:          serverArticle.status,
-      createdAt:       serverArticle.created_at  ?? serverArticle.createdAt,
-      updatedAt:       serverArticle.updated_at  ?? serverArticle.updatedAt,
+      id: serverArticle.id,
+      title: serverArticle.title,
+      file: serverArticle.file,
+      status: serverArticle.status,
+      createdAt: serverArticle.created_at ?? serverArticle.createdAt,
+      updatedAt: serverArticle.updated_at ?? serverArticle.updatedAt,
       rejectionReason: serverArticle.rejection_reason ?? serverArticle.rejectionReason ?? null,
     };
 
@@ -66,31 +66,31 @@ export const ArticleDB = {
       // Artículo nuevo — guardar directamente
       await this.save(incoming);
       console.log(`⬇️ Artículo nuevo del servidor: ${incoming.title}`);
-      return incoming;
+      return true; // cambio real → contabilizar
     }
 
     // Comparar timestamps — mantener el más reciente
     const serverTime = new Date(incoming.updatedAt).getTime();
-    const localTime  = new Date(existing.updatedAt).getTime();
+    const localTime = new Date(existing.updatedAt).getTime();
 
     if (serverTime > localTime) {
       await this.save(incoming);
       console.log(`🔄 Artículo actualizado del servidor: ${incoming.title}`);
-      return incoming;
+      return true; // cambio real → contabilizar
     }
 
     console.log(`✅ Local más reciente, sin cambios: ${existing.title}`);
-    return existing;
+    return false; // sin cambio → NO contabilizar
   },
 
   /** Obtiene un artículo por id. Devuelve undefined si no existe. */
   async getById(id) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(STORE_NAME, 'readonly');
+      const tx = db.transaction(STORE_NAME, 'readonly');
       const request = tx.objectStore(STORE_NAME).get(id);
       request.onsuccess = (e) => resolve(e.target.result);
-      request.onerror   = (e) => reject(e.target.error);
+      request.onerror = (e) => reject(e.target.error);
     });
   },
 
@@ -98,7 +98,7 @@ export const ArticleDB = {
   async getAll() {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(STORE_NAME, 'readonly');
+      const tx = db.transaction(STORE_NAME, 'readonly');
       const request = tx.objectStore(STORE_NAME).getAll();
       request.onsuccess = (e) => {
         const sorted = e.target.result.sort(
@@ -114,10 +114,10 @@ export const ArticleDB = {
   async deleteById(id) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(STORE_NAME, 'readwrite');
+      const tx = db.transaction(STORE_NAME, 'readwrite');
       const request = tx.objectStore(STORE_NAME).delete(id);
       request.onsuccess = () => resolve(true);
-      request.onerror   = (e) => reject(e.target.error);
+      request.onerror = (e) => reject(e.target.error);
     });
   },
 
@@ -125,10 +125,10 @@ export const ArticleDB = {
   async saveComment(comment) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(COMMENTS_STORE, 'readwrite');
+      const tx = db.transaction(COMMENTS_STORE, 'readwrite');
       const request = tx.objectStore(COMMENTS_STORE).put(comment);
       request.onsuccess = () => resolve(comment);
-      request.onerror   = (e) => reject(e.target.error);
+      request.onerror = (e) => reject(e.target.error);
     });
   },
 
@@ -136,10 +136,10 @@ export const ArticleDB = {
   async getCommentById(id) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(COMMENTS_STORE, 'readonly');
+      const tx = db.transaction(COMMENTS_STORE, 'readonly');
       const request = tx.objectStore(COMMENTS_STORE).get(id);
       request.onsuccess = (e) => resolve(e.target.result);
-      request.onerror   = (e) => reject(e.target.error);
+      request.onerror = (e) => reject(e.target.error);
     });
   },
 
@@ -147,9 +147,9 @@ export const ArticleDB = {
   async getCommentsByArticle(articleId) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(COMMENTS_STORE, 'readonly');
-      const store   = tx.objectStore(COMMENTS_STORE);
-      const index   = store.index('articleId');
+      const tx = db.transaction(COMMENTS_STORE, 'readonly');
+      const store = tx.objectStore(COMMENTS_STORE);
+      const index = store.index('articleId');
       const request = index.getAll(articleId);
       request.onsuccess = (e) => {
         const result = e.target.result;
@@ -169,10 +169,10 @@ export const ArticleDB = {
   async deleteComment(id) {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx      = db.transaction(COMMENTS_STORE, 'readwrite');
+      const tx = db.transaction(COMMENTS_STORE, 'readwrite');
       const request = tx.objectStore(COMMENTS_STORE).delete(id);
       request.onsuccess = () => resolve(true);
-      request.onerror   = (e) => reject(e.target.error);
+      request.onerror = (e) => reject(e.target.error);
     });
   },
 };
