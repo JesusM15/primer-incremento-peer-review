@@ -19,10 +19,10 @@ app.use(express.json({ limit: '50mb' }));
 
 // Configuración de PostgreSQL
 const pool = new Pool({
-  host:     'localhost',
-  port:     5432,
+  host: 'localhost',
+  port: 5432,
   database: 'peerreview',
-  user:     'postgres',
+  user: 'postgres',
   password: process.env.DB_PASSWORD || 'h12345z_je',
 });
 
@@ -194,19 +194,24 @@ app.post('/sync', async (req, res) => {
   try {
     await client.query('BEGIN');
     for (const article of articles) {
-      await client.query(
-        `INSERT INTO articles (id, title, file, status, created_at, updated_at, rejection_reason)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO UPDATE SET
-           title = EXCLUDED.title,
-           file = EXCLUDED.file,
-           status = EXCLUDED.status,
-           updated_at = EXCLUDED.updated_at,
-           rejection_reason = EXCLUDED.rejection_reason`,
-        [article.id, article.title, JSON.stringify(article.file),
-         article.status, article.createdAt, article.updatedAt,
-         article.rejectionReason]
-      );
+      if (article._operation === 'DELETE') {
+        await client.query('DELETE FROM articles WHERE id = $1', [article.id]);
+      } else {
+        // Para CREATE y UPDATE, hacemos UPSERT (Insert on conflict)
+        await client.query(
+          `INSERT INTO articles (id, title, file, status, created_at, updated_at, rejection_reason)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET
+             title = EXCLUDED.title,
+             file = EXCLUDED.file,
+             status = EXCLUDED.status,
+             updated_at = EXCLUDED.updated_at,
+             rejection_reason = EXCLUDED.rejection_reason`,
+          [article.id, article.title, JSON.stringify(article.file),
+          article.status, article.createdAt, article.updatedAt,
+          article.rejectionReason]
+        );
+      }
     }
     await client.query('COMMIT');
     const result = await pool.query('SELECT * FROM articles ORDER BY created_at DESC');
@@ -232,8 +237,8 @@ app.post('/sync/comments', async (req, res) => {
           `INSERT INTO comments (id, article_id, author_id, author_name, author_role, sections, content)
            VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING`,
           [commentData.id, commentData.articleId, commentData.authorId,
-           commentData.authorName, commentData.authorRole,
-           JSON.stringify(commentData.sections), commentData.content]
+          commentData.authorName, commentData.authorRole,
+          JSON.stringify(commentData.sections), commentData.content]
         );
       } else if (_operation === 'UPDATE_COMMENT') {
         await client.query(

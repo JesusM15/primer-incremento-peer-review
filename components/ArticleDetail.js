@@ -7,6 +7,7 @@ import { ArticleManager } from './ArticleManager.js';
 import { CommentManager } from './CommentManager.js';
 import { AuthManager } from './AuthManager.js';
 import { Toast } from './Toast.js';
+import { PDFViewer } from './PDFViewer.js';
 
 export const ArticleDetail = {
   _container: null,
@@ -125,6 +126,16 @@ export const ArticleDetail = {
       </div>
     `;
 
+    // Muestra u oculta el botón del navbar principal (arriba)
+    const topPdfBtn = document.getElementById('topPdfBtn');
+    if (topPdfBtn) {
+      if (this._article.file && this._article.file.data) {
+        topPdfBtn.style.display = 'inline-block';
+      } else {
+        topPdfBtn.style.display = 'none';
+      }
+    }
+
     this._setupEventListeners();
   },
 
@@ -133,6 +144,10 @@ export const ArticleDetail = {
    */
   _renderArticleHeader() {
     const statusClass = this._getStatusClass(this._article.status);
+    const hasPDF = this._article.file && this._article.file.data;
+    const isPDF = this._article.file && (this._article.file.type === 'application/pdf' ||
+      (this._article.file.name || '').toLowerCase().endsWith('.pdf'));
+
     return `
       <div class="article-header">
         <div class="article-title-section">
@@ -147,11 +162,48 @@ export const ArticleDetail = {
             Actualizado: ${new Date(this._article.updatedAt).toLocaleDateString('es-ES')}
           </p>
           ${this._article.file ? `
-            <p class="article-file">📄 ${this._escapeHtml(this._article.file.name)}</p>
+            <div class="article-file-row">
+              <p class="article-file">📄 ${this._escapeHtml(this._article.file.name)}</p>
+              ${hasPDF ? `
+                <button
+                  class="pdf-view-btn"
+                  onclick="ArticleDetail._openPDFViewer()"
+                  title="Ver PDF en el navegador"
+                >
+                  <span class="pdf-view-btn__icon">👁</span>
+                  ${isPDF ? 'Ver PDF' : 'Ver Archivo'}
+                </button>
+              ` : `
+                <span class="pdf-view-btn pdf-view-btn--unavailable" title="Abre el artículo nuevamente para habilitar el visor">
+                  📂 Sin previsualización
+                </span>
+              `}
+            </div>
           ` : ''}
         </div>
       </div>
     `;
+  },
+
+  /**
+   * Abre el visor de PDF para el artículo actual.
+   */
+  async _openPDFViewer() {
+    if (!this._article || !this._article.file || !this._article.file.data) {
+      Toast.warning('No hay archivo disponible para previsualizar.');
+      return;
+    }
+
+    try {
+      const blob = new Blob([this._article.file.data], {
+        type: this._article.file.type || 'application/pdf'
+      });
+      const blobUrl = URL.createObjectURL(blob);
+      PDFViewer.open(blobUrl, this._article.file.name || 'documento.pdf');
+    } catch (error) {
+      console.error('❌ Error abriendo visor PDF:', error);
+      Toast.error('No se pudo abrir el visor de PDF.');
+    }
   },
 
   /**

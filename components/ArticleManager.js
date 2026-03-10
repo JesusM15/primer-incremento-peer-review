@@ -9,10 +9,10 @@ import { Toast } from './Toast.js';
 
 /** Estados válidos del ciclo de revisión */
 export const ArticleStatus = Object.freeze({
-  RECEIVED:   'Recibido',
-  IN_REVIEW:  'En Revisión',
-  APPROVED:   'Aceptado',
-  REJECTED:   'Rechazado',
+  RECEIVED: 'Recibido',
+  IN_REVIEW: 'En Revisión',
+  APPROVED: 'Aceptado',
+  REJECTED: 'Rechazado',
 });
 
 /** Genera un id único simple (timestamp + random) */
@@ -22,15 +22,25 @@ function generateId() {
 
 /**
  * Serializa el File a un objeto plano que IndexedDB puede almacenar.
- * Guarda nombre, tipo y tamaño (el binario se omite en esta versión MVP).
+ * Guarda metadatos + el binario como ArrayBuffer para permitir el visor de PDF.
  */
-function serializeFile(file) {
+async function serializeFile(file) {
   if (!file) return null;
+
+  // Leer el binario como ArrayBuffer
+  const arrayBuffer = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = (e) => reject(e.target.error);
+    reader.readAsArrayBuffer(file);
+  });
+
   return {
-    name:         file.name,
-    type:         file.type,
-    size:         file.size,
+    name: file.name,
+    type: file.type,
+    size: file.size,
     lastModified: file.lastModified,
+    data: arrayBuffer,   // ← binario guardado
   };
 }
 
@@ -42,18 +52,18 @@ export const ArticleManager = {
    */
   async create({ title, file }) {
     const article = {
-      id:        generateId(),
-      title:     title.trim(),
-      file:      serializeFile(file),
-      status:    ArticleStatus.RECEIVED,
+      id: generateId(),
+      title: title.trim(),
+      file: await serializeFile(file),
+      status: ArticleStatus.RECEIVED,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    
+
     // Guardar localmente
     const savedArticle = await ArticleDB.save(article);
     console.log('✅ Artículo guardado localmente:', savedArticle);
-    
+
     // Agregar a cola de sincronización
     try {
       await SyncDB.addOperation('CREATE', savedArticle);
@@ -61,9 +71,9 @@ export const ArticleManager = {
     } catch (syncError) {
       console.warn('⚠️ Error al agregar a cola de sincronización:', syncError);
     }
-    
+
     Toast.success('Artículo creado correctamente');
-    
+
     return savedArticle;
   },
 
@@ -81,16 +91,16 @@ export const ArticleManager = {
     const updated = {
       ...existing,
       title: title ? title.trim() : existing.title,
-      file: file ? serializeFile(file) : existing.file,
+      file: file ? await serializeFile(file) : existing.file,
       status: status || existing.status,
       rejectionReason: rejectionReason || existing.rejectionReason,
       updatedAt: new Date().toISOString(),
     };
-    
+
     // Actualizar localmente
     const savedArticle = await ArticleDB.save(updated);
     console.log('✅ Artículo actualizado localmente:', savedArticle);
-    
+
     // Agregar a cola de sincronización
     try {
       await SyncDB.addOperation('UPDATE', savedArticle);
@@ -98,9 +108,9 @@ export const ArticleManager = {
     } catch (syncError) {
       console.warn('⚠️ Error al agregar a cola de sincronización:', syncError);
     }
-    
+
     Toast.success('Artículo actualizado correctamente');
-    
+
     return savedArticle;
   },
 
@@ -129,11 +139,11 @@ export const ArticleManager = {
   async delete(id) {
     const existing = await ArticleDB.getById(id);
     if (!existing) return false;
-    
+
     // Eliminar localmente
     await ArticleDB.deleteById(id);
     console.log('🗑️ Artículo eliminado localmente:', id);
-    
+
     // Agregar a cola de sincronización
     try {
       await SyncDB.addOperation('DELETE', { id, deletedAt: new Date().toISOString() });
@@ -141,9 +151,24 @@ export const ArticleManager = {
     } catch (syncError) {
       console.warn('⚠️ Error al agregar a cola de sincronización:', syncError);
     }
-    
+
     Toast.success('Artículo eliminado correctamente');
-    
+
     return true;
+  },
+
+  /**
+   * Devuelve una URL de objeto (Blob URL) para el PDF del artículo.
+   * Debe ser revocada cuando ya no se necesite con URL.revokeObjectURL().
+   * @param {string} id
+   * @returns {Promise<string|null>}
+   */
+  async getPDFBlobUrl(id) {
+    const article = await ArticleDB.getById(id);
+    if (!article || !article.file || !article.file.data) {
+      return null;
+    }
+    const blob = new Blob([article.file.data], { type: article.file.type || 'application/pdf' });
+    return URL.createObjectURL(blob);
   },
 };

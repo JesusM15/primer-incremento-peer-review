@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,6 +8,7 @@
     <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
     <link rel="stylesheet" href="styles/minimal.css" />
 </head>
+
 <body>
     <!-- Header con navegación -->
     <header class="site-header">
@@ -15,6 +17,9 @@
             <nav class="header-nav">
                 <a href="dashboard.html" class="nav-link">▶ Tablero</a>
                 <a href="index.html" class="nav-link">+ Artículos</a>
+                <a href="#" id="topPdfBtn" class="nav-link" style="display: none; color: #60a5fa; font-weight: 600;"
+                    onclick="event.preventDefault(); window.ArticleDetail && window.ArticleDetail._openPDFViewer()">📄
+                    Ver PDF</a>
             </nav>
             <div class="header-user">
                 <span id="user-display" class="user-info"></span>
@@ -36,7 +41,7 @@
     <script type="module">
         // Verificación simple de sesión activa
         const savedUser = localStorage.getItem('peerreview_user');
-        
+
         if (!savedUser) {
             console.log('🔍 No hay sesión, redirigiendo a login...');
             window.location.replace('./login.html');
@@ -52,7 +57,7 @@
                     if (userDisplay) {
                         const icons = {
                             'Autor': '✍️',
-                            'Revisor': '👁️', 
+                            'Revisor': '👁️',
                             'Editor': '📝'
                         };
                         userDisplay.textContent = `${icons[user.role] || '👤'} ${user.name}`;
@@ -65,9 +70,9 @@
         }
 
         // Función de logout global
-        window.logout = function() {
+        window.logout = function () {
             console.log('🚪 Cerrando sesión...');
-            
+
             // Marcar sesión como inactiva
             const savedUser = localStorage.getItem('peerreview_user');
             if (savedUser) {
@@ -79,10 +84,10 @@
                     console.error('Error actualizando sesión:', error);
                 }
             }
-            
+
             // Limpiar sessionStorage
             sessionStorage.clear();
-            
+
             // Redirigir a login
             window.location.href = './login.html';
         };
@@ -92,13 +97,13 @@
     <script type="module">
         import { ArticleDetail } from './components/ArticleDetail.js';
         import { AuthManager } from './components/AuthManager.js';
-        
+
         // Función principal para inicializar la vista
         async function initializeArticleView() {
             // Obtener ID del artículo de la URL
             const urlParams = new URLSearchParams(window.location.search);
             const articleId = urlParams.get('id');
-            
+
             if (!articleId) {
                 console.error('❌ No se proporcionó ID de artículo');
                 document.getElementById('article-detail').innerHTML = `
@@ -110,13 +115,13 @@
                 `;
                 return;
             }
-            
+
             console.log(`📄 Cargando artículo: ${articleId}`);
-            
+
             try {
                 // Inicializar AuthManager primero
                 AuthManager.init();
-                
+
                 // Verificar autenticación después de inicializar
                 const user = AuthManager.getCurrentUser();
                 if (!user) {
@@ -130,12 +135,12 @@
                     `;
                     return;
                 }
-                
+
                 console.log('👤 Usuario autenticado:', user.role);
-                
+
                 // Ahora inicializar ArticleDetail
                 await ArticleDetail.init('article-detail', articleId);
-                
+
             } catch (error) {
                 console.error('❌ Error inicializando AuthManager o ArticleDetail:', error);
                 document.getElementById('article-detail').innerHTML = `
@@ -147,7 +152,7 @@
                 `;
             }
         }
-        
+
         // Inicializar cuando el DOM esté listo
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initializeArticleView);
@@ -156,4 +161,5 @@
         }
     </script>
 </body>
+
 </html>

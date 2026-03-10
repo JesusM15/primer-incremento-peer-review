@@ -176,7 +176,11 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         if self._is_api():
             self._proxy('GET')
         else:
-            self.send_head()   # usa nuestro send_head modificado
+            # Servir index.html directamente en la raíz — evita redirect 301
+            # que el Service Worker no puede cachear
+            if self.path == '/':
+                self.path = '/index.html'
+            self.send_head()
 
     def do_POST(self):
         if self._is_api(): self._proxy('POST')

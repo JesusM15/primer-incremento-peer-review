@@ -4,22 +4,18 @@
  * Proporciona funcionalidad offline y caché de recursos
  */
 
-const CACHE_NAME = 'peerreview-v1';
+const CACHE_NAME = 'peerreview-v2';
 const STATIC_ASSETS = [
-  '/',
   '/index.html',
   '/home.html',
   '/dashboard.html',
-  '/styles.css',
-  '/app.js',
-  '/pages/dashboard.js',
-  '/pages/article-form.js',
+  '/login.html',
+  '/styles/minimal.css',
   '/components/ArticleManager.js',
   '/components/ArticleList.js',
   '/components/Router.js',
   '/components/AuthManager.js',
   '/components/SyncEngine.js',
-  '/components/Toast.js',
   '/db/ArticleDB.js',
   '/db/SyncDB.js'
 ];
@@ -31,15 +27,19 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('[SW] Cacheando recursos estáticos...');
-        return cache.addAll(STATIC_ASSETS);
+        console.log('[SW] Cacheando recursos estáticos individualmente...');
+        return Promise.allSettled(
+          STATIC_ASSETS.map(url =>
+            fetch(url).then(response => {
+              if (!response.ok) throw new Error(`Status ${response.status} for ${url}`);
+              return cache.put(url, response);
+            }).catch(err => console.error(`[SW] Failed to cache ${url}:`, err))
+          )
+        );
       })
       .then(() => {
-        console.log('[SW] Recursos cacheados correctamente');
+        console.log('[SW] Instalación completada (algunos recursos pueden haber fallado)');
         return self.skipWaiting();
-      })
-      .catch((error) => {
-        console.error('[SW] Error cacheando recursos:', error);
       })
   );
 });
@@ -81,16 +81,28 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((networkResponse) => {
-          if (networkResponse.ok) {
-            const clonedResponse = networkResponse.clone();
-            caches.open(CACHE_NAME)
-              .then((cache) => cache.put(request, clonedResponse));
+          if (networkResponse && networkResponse.ok && (url.protocol === 'http:' || url.protocol === 'https:')) {
+            try {
+              const clonedResponse = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clonedResponse)).catch(e => console.warn('Cache put failed', e));
+            } catch (e) {
+              console.warn('Could not clone response:', e);
+            }
           }
           return networkResponse;
         })
         .catch(() => {
           console.warn('[SW] Red no disponible, usando cache para:', request.url);
-          return caches.match(request) || caches.match('/index.html');
+          return caches.match(request).then((cachedResponse) => {
+            if (cachedResponse) return cachedResponse;
+            return caches.match('/index.html').then((indexResponse) => {
+              return indexResponse || new Response('App Offline. Please connect to the internet to load.', {
+                status: 503,
+                statusText: 'Service Unavailable',
+                headers: new Headers({ 'Content-Type': 'text/plain' })
+              });
+            });
+          });
         })
     );
     return;
@@ -105,22 +117,24 @@ self.addEventListener('fetch', (event) => {
             // Actualizar cache en segundo plano
             fetch(request)
               .then((networkResponse) => {
-                if (networkResponse.ok) {
-                  caches.open(CACHE_NAME)
-                    .then((cache) => cache.put(request, networkResponse));
+                if (networkResponse && networkResponse.ok && (url.protocol === 'http:' || url.protocol === 'https:')) {
+                  caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse.clone())).catch(e => console.warn('Cache update failed', e));
                 }
               })
-              .catch(() => {});
+              .catch(() => { });
             return cachedResponse;
           }
 
           // No está en cache, ir a la red
           return fetch(request)
             .then((networkResponse) => {
-              if (networkResponse.ok) {
-                const clonedResponse = networkResponse.clone();
-                caches.open(CACHE_NAME)
-                  .then((cache) => cache.put(request, clonedResponse));
+              if (networkResponse && networkResponse.ok && (url.protocol === 'http:' || url.protocol === 'https:')) {
+                try {
+                  const clonedResponse = networkResponse.clone();
+                  caches.open(CACHE_NAME).then((cache) => cache.put(request, clonedResponse)).catch(e => console.warn('Cache put failed', e));
+                } catch (e) {
+                  console.warn('Could not clone response:', e);
+                }
               }
               return networkResponse;
             })
@@ -138,10 +152,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((networkResponse) => {
-          if (networkResponse.ok) {
-            const clonedResponse = networkResponse.clone();
-            caches.open(CACHE_NAME)
-              .then((cache) => cache.put(request, clonedResponse));
+          if (networkResponse && networkResponse.ok && (url.protocol === 'http:' || url.protocol === 'https:')) {
+            try {
+              const clonedResponse = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clonedResponse)).catch(e => console.warn('Cache put image failed', e));
+            } catch (e) {
+              console.warn('Could not clone image response:', e);
+            }
           }
           return networkResponse;
         })
